@@ -6,6 +6,13 @@ from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
 
+from taskiq_asyncpg.broker_queries import (
+    CREATE_TABLE_QUERY,
+    DELETE_MESSAGE_QUERY,
+    INSERT_MESSAGE_QUERY,
+    SELECT_MESSAGE_QUERY,
+)
+
 _T = TypeVar("_T")
 logger = logging.getLogger("taskiq.asyncpg_broker")
 
@@ -54,16 +61,9 @@ class AsyncpgBroker(AsyncBroker):
         self.write_pool = await asyncpg.create_pool(self.dsn, **self.connection_kwargs)
 
         # Create messages table if it doesn't exist
-        await self.read_conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.table_name} (
-                id SERIAL PRIMARY KEY,
-                task_id VARCHAR NOT NULL,
-                task_name VARCHAR NOT NULL,
-                message TEXT NOT NULL,
-                labels JSONB NOT NULL,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-        """)
+        if self.read_conn is None:
+            raise ValueError("self.read_conn is None")
+        await self.read_conn.execute(CREATE_TABLE_QUERY.format(self.table_name))
         # Listen to the specified channel
         await self.read_conn.add_listener(self.channel_name, self._notification_handler)
         self._queue = asyncio.Queue()
@@ -96,11 +96,7 @@ class AsyncpgBroker(AsyncBroker):
         async with self.write_pool.acquire() as conn:
             # Insert the message into the database
             message_inserted_id = await conn.fetchval(
-                f"""
-                INSERT INTO {self.table_name} (task_id, task_name, message, labels)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id
-                """,
+                INSERT_MESSAGE_QUERY.format(self.table_name),
                 message.task_id,
                 message.task_name,
                 message.message.decode(),
@@ -110,7 +106,7 @@ class AsyncpgBroker(AsyncBroker):
             delay_value = message.labels.get("delay")
             if delay_value is not None:
                 delay_seconds = int(delay_value)
-                asyncio.create_task(
+                asyncio.create_task(  # noqa: RUF006
                     self._schedule_notification(message_inserted_id, delay_seconds)
                 )
             else:
@@ -148,7 +144,7 @@ class AsyncpgBroker(AsyncBroker):
                 message_id = int(payload)
                 # Fetch the message from database
                 message_row = await self.read_conn.fetchrow(
-                    f"SELECT * FROM {self.table_name} WHERE id = $1", message_id
+                    SELECT_MESSAGE_QUERY.format(self.table_name), message_id
                 )
                 if message_row is None:
                     logger.warning(
@@ -158,12 +154,13 @@ class AsyncpgBroker(AsyncBroker):
                 # Construct AckableMessage
                 message_data = message_row["message"].encode()
 
-                async def ack() -> None:
+                async def ack(*, _message_id: int = message_id) -> None:
                     if self.read_conn is None:
                         raise ValueError("Call startup before starting listening.")
                     # Delete the message from the database
                     await self.read_conn.execute(
-                        f"DELETE FROM {self.table_name} WHERE id = $1", message_id
+                        DELETE_MESSAGE_QUERY.format(self.table_name),
+                        _message_id,
                     )
 
                 yield AckableMessage(data=message_data, ack=ack)

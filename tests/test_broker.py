@@ -9,6 +9,10 @@ from taskiq import AckableMessage, BrokerMessage
 from taskiq.utils import maybe_awaitable
 
 from taskiq_asyncpg import AsyncpgBroker
+from taskiq_asyncpg.broker_queries import (
+    DELETE_ALL_MESSAGES_QUERY,
+    INSERT_MESSAGE_QUERY,
+)
 
 
 # Helper function to get the first task from the broker
@@ -43,7 +47,7 @@ async def broker(postgresql_dsn: str) -> AsyncGenerator[AsyncpgBroker, None]:
 @pytest.fixture(autouse=True)
 async def clean_messages_table(broker: AsyncpgBroker) -> None:
     conn = await asyncpg.connect(dsn=broker.dsn)
-    await conn.execute(f"DELETE FROM {broker.table_name}")
+    await conn.execute(DELETE_ALL_MESSAGES_QUERY.format(broker.table_name))
     await conn.close()
 
 
@@ -104,10 +108,10 @@ async def test_startup(broker: AsyncpgBroker) -> None:
     table_exists = await conn.fetchval(
         """
         SELECT EXISTS (
-            SELECT FROM information_schema.tables 
+            SELECT FROM information_schema.tables
             WHERE table_schema = 'public' AND table_name = $1
         )
-    """,
+        """,
         broker.table_name,
     )
     await conn.close()
@@ -117,8 +121,10 @@ async def test_startup(broker: AsyncpgBroker) -> None:
 @pytest.mark.anyio
 async def test_listen(broker: AsyncpgBroker) -> None:
     """
-    Test that the broker can listen to messages inserted directly
-    into the database and notified via the channel.
+    Test listen.
+
+    Test that the broker can listen to messages inserted directly into the database
+    and notified via the channel.
     """
     # Insert a message directly into the database
     conn = await asyncpg.connect(dsn=broker.dsn)
@@ -127,11 +133,7 @@ async def test_listen(broker: AsyncpgBroker) -> None:
     task_name = "test_task"
     labels = {"label1": "label_val"}
     message_id = await conn.fetchval(
-        f"""
-        INSERT INTO {broker.table_name} (task_id, task_name, message, labels)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-        """,
+        INSERT_MESSAGE_QUERY.format(broker.table_name),
         task_id,
         task_name,
         message_content.decode(),
@@ -155,11 +157,7 @@ async def test_wrong_format(broker: AsyncpgBroker) -> None:
     # Insert a message with missing task_id and task_name
     conn = await asyncpg.connect(dsn=broker.dsn)
     message_id = await conn.fetchval(
-        f"""
-        INSERT INTO {broker.table_name} (task_id, task_name, message, labels)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-        """,
+        INSERT_MESSAGE_QUERY.format(broker.table_name),
         "",  # Missing task_id
         "",  # Missing task_name
         "wrong",  # Message content
@@ -171,7 +169,7 @@ async def test_wrong_format(broker: AsyncpgBroker) -> None:
 
     # Listen for the message
     message = await asyncio.wait_for(get_first_task(broker), timeout=1.0)
-    assert message.data == b"wrong"
+    assert message.data == b"wrong"  # noqa: PLR2004
 
     # Acknowledge the message
     await maybe_awaitable(message.ack())
