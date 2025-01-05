@@ -1,0 +1,52 @@
+name: Testing taskiq-asyncpg
+
+on: pull_request
+
+jobs:
+  lint:
+    strategy:
+      matrix:
+        cmd:
+          - ruff check
+          - ruff format --check
+          - mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv run ${{ matrix.cmd }}
+
+  pytest:
+    strategy:
+      matrix:
+        py_version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    runs-on: "ubuntu-latest"
+    services:
+      postgres:
+        image: postgres
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskiqasyncpg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.py_version }}"
+      - name: Run pytest check
+        run: uv run pytest -vv -n auto --cov="taskiq_asyncpg" .
+      - name: Generate report
+        run: uv run coverage xml
+      - name: Upload coverage reports to Codecov with GitHub Action
+        uses: codecov/codecov-action@v3
+        if: matrix.py_version == '3.9'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          verbose: true
