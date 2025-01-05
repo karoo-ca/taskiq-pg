@@ -9,7 +9,7 @@ jobs:
         cmd:
           - ruff check
           - ruff format --check
-          - mypy
+          - mypy .
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
