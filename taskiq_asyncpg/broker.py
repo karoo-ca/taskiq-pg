@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
+from typing import Any, AsyncGenerator, Callable, Dict, Optional, TypeVar
 
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
@@ -28,7 +28,8 @@ class AsyncpgBroker(AsyncBroker):
         channel_name: str = "taskiq",
         table_name: str = "taskiq_messages",
         max_retry_attempts: int = 5,
-        **connection_kwargs: Any,
+        connection_kwargs: Optional[Dict[str, Any]] = None,
+        pool_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Construct a new broker.
@@ -40,6 +41,7 @@ class AsyncpgBroker(AsyncBroker):
         :param table_name: Name of the table to store messages.
         :param max_retry_attempts: Maximum number of message processing attempts.
         :param connection_kwargs: Additional arguments for asyncpg connection.
+        :param pool_kwargs: Additional arguments for asyncpg pool creation.
         """
         super().__init__(
             result_backend=result_backend,
@@ -48,7 +50,8 @@ class AsyncpgBroker(AsyncBroker):
         self.dsn = dsn
         self.channel_name = channel_name
         self.table_name = table_name
-        self.connection_kwargs = connection_kwargs
+        self.connection_kwargs = connection_kwargs if connection_kwargs else {}
+        self.pool_kwargs = pool_kwargs if pool_kwargs else {}
         self.max_retry_attempts = max_retry_attempts
         self.read_conn: Optional[asyncpg.Connection] = None
         self.write_pool: Optional[asyncpg.pool.Pool] = None
@@ -58,7 +61,7 @@ class AsyncpgBroker(AsyncBroker):
         """Initialize the broker."""
         await super().startup()
         self.read_conn = await asyncpg.connect(self.dsn, **self.connection_kwargs)
-        self.write_pool = await asyncpg.create_pool(self.dsn, **self.connection_kwargs)
+        self.write_pool = await asyncpg.create_pool(self.dsn, **self.pool_kwargs)
 
         # Create messages table if it doesn't exist
         if self.read_conn is None:
