@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.9"
       - name: Install deps
-        uses: knowsuchagency/poetry-install@v1
+        uses: knowsuchagency/poetry-install@v2
         env:
           POETRY_VIRTUALENVS_CREATE: false
       - name: Release package
