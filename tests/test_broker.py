@@ -15,7 +15,6 @@ from taskiq_asyncpg.broker_queries import (
 )
 
 
-# Helper function to get the first task from the broker
 async def get_first_task(broker: AsyncpgBroker) -> AckableMessage:
     """
     Get the first message from the broker's listen method.
@@ -29,9 +28,9 @@ async def get_first_task(broker: AsyncpgBroker) -> AckableMessage:
     raise RuntimeError(msg)
 
 
-# Fixture to set up and tear down the broker
 @pytest.fixture
 async def broker(postgresql_dsn: str) -> AsyncGenerator[AsyncpgBroker, None]:
+    """Fixture to set up and tear down the broker."""
     # Initialize the broker with test parameters
     broker = AsyncpgBroker(
         dsn=postgresql_dsn,
@@ -43,9 +42,9 @@ async def broker(postgresql_dsn: str) -> AsyncGenerator[AsyncpgBroker, None]:
     await broker.shutdown()
 
 
-# Fixture to clean up the messages table before each test
 @pytest.fixture(autouse=True)
 async def clean_messages_table(broker: AsyncpgBroker) -> None:
+    """Fixture to clean up the messages table before each test."""
     conn = await asyncpg.connect(dsn=broker.dsn)
     await conn.execute(DELETE_ALL_MESSAGES_QUERY.format(broker.table_name))
     await conn.close()
