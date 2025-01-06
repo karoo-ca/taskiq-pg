@@ -105,8 +105,6 @@ ignore = [
   "D106",    # Missing docstring in public nested class
   "COM812",  # Missing trailing comma (formatter handles)
   "ISC001",  # Single line implicit string concatenation (formatter handles)
-  "ANN101",
-  "ANN102",
 ]
 exclude = [".venv/"]
 mccabe = { max-complexity = 10 }
