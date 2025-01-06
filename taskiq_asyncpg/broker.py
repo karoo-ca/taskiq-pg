@@ -76,8 +76,24 @@ class AsyncpgBroker(AsyncBroker):
         if self.write_pool is not None:
             await self.write_pool.close()
 
-    def _notification_handler(self: Self, channel: str, payload: str) -> None:
-        """Handle NOTIFY messages."""
+            # must adhere to listener protocol handler signature
+
+    def _notification_handler(
+        self: Self,
+        _connection: Any,
+        _pid: Any,
+        channel: str,
+        payload: str,
+    ) -> None:
+        """Handle NOTIFY messages.
+
+        From asyncpg.connection.add_listener docstring:
+            A callable or a coroutine function receiving the following arguments:
+            **connection**: a Connection the callback is registered with;
+            **pid**: PID of the Postgres server that sent the notification;
+            **channel**: name of the channel the notification was sent to;
+            **payload**: the payload.
+        """
         logger.debug(f"Received notification on channel {channel}: {payload}")
         if self._queue is not None:
             self._queue.put_nowait(payload)
