@@ -3,8 +3,10 @@ import random
 import string
 from typing import AsyncGenerator, TypeVar
 
+import asyncpg
 import pytest
 
+from taskiq_asyncpg.broker import AsyncpgBroker
 from taskiq_asyncpg.result_backend import AsyncpgResultBackend
 
 _ReturnType = TypeVar("_ReturnType")
@@ -64,3 +66,29 @@ async def asyncpg_result_backend(
         f"DROP TABLE {postgres_table}",
     )
     await backend.shutdown()
+
+
+@pytest.fixture()
+async def asyncpg_broker(postgresql_dsn: str) -> AsyncGenerator[AsyncpgBroker, None]:
+    """
+    Fixture to set up and tear down the broker.
+
+    Initializes the broker with test parameters.
+    """
+    broker = AsyncpgBroker(
+        dsn=postgresql_dsn,
+        channel_name="taskiq_test_channel",
+        table_name="taskiq_test_messages",
+    )
+    await broker.startup()
+    yield broker
+    await broker.shutdown()
+
+
+@pytest.fixture(autouse=True)
+async def clean_messages_table(asyncpg_broker: AsyncpgBroker) -> None:
+    """Fixture to clean up the messages table before each test."""
+    conn = await asyncpg.connect(dsn=asyncpg_broker.dsn)
+
+    await conn.execute("DELETE FROM {}".format(asyncpg_broker.table_name))  # noqa: S608
+    await conn.close()
