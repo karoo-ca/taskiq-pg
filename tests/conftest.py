@@ -1,15 +1,13 @@
 import os
 import random
 import string
-from typing import AsyncGenerator, TypeVar
+from typing import AsyncGenerator
 
 import asyncpg
 import pytest
 
 from taskiq_asyncpg.broker import AsyncpgBroker
 from taskiq_asyncpg.result_backend import AsyncpgResultBackend
-
-_ReturnType = TypeVar("_ReturnType")
 
 
 @pytest.fixture(scope="session")
@@ -55,8 +53,8 @@ def postgresql_dsn() -> str:
 async def asyncpg_result_backend(
     postgresql_dsn: str,
     postgres_table: str,
-) -> AsyncGenerator[AsyncpgResultBackend[_ReturnType], None]:
-    backend: AsyncpgResultBackend[_ReturnType] = AsyncpgResultBackend(
+) -> AsyncGenerator[AsyncpgResultBackend[object], None]:
+    backend: AsyncpgResultBackend[object] = AsyncpgResultBackend(
         dsn=postgresql_dsn,
         table_name=postgres_table,
     )
