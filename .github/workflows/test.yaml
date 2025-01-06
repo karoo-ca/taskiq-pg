@@ -9,7 +9,7 @@ jobs:
         cmd:
           - ruff check
           - ruff format --check
-          - mypy
+          - mypy .
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +21,7 @@ jobs:
 
   pytest:
     strategy:
+      fail-fast: false
       matrix:
         py_version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     runs-on: "ubuntu-latest"
