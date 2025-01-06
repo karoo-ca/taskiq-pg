@@ -1,0 +1,15 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "extra-files": [
+        {
+          "type": "regex",
+          "path": "taskiq_asyncpg/__init__.py",
+          "regex": "__version__\\s*=\\s*[\"'](.*?)[\"']",
+          "replacement": "__version__ = \"${version}\""
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 [project]
 name = "taskiq-asyncpg"
-version = "0.1.0"
+dynamic = ["version"]
 description = "AsyncPG and PostgreSQL integration for taskiq"
 authors = [{ name = "Oliver Lambson", email = "ollie@karoo.ca" }]
 readme = "README.md"
@@ -36,6 +36,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "taskiq_asyncpg/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["taskiq_asyncpg"]
 
 [dependency-groups]
 dev = [
