@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncGenerator, Callable, Optional, Self, TypeVar
+from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
 
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
@@ -21,7 +21,7 @@ class AsyncpgBroker(AsyncBroker):
     """Broker that uses PostgreSQL and asyncpg with LISTEN/NOTIFY."""
 
     def __init__(
-        self: Self,
+        self,
         dsn: str = "postgresql://postgres:postgres@localhost:5432/postgres",
         result_backend: Optional[AsyncResultBackend[_T]] = None,
         task_id_generator: Optional[Callable[[], str]] = None,
@@ -54,7 +54,7 @@ class AsyncpgBroker(AsyncBroker):
         self.write_pool: Optional[asyncpg.pool.Pool] = None
         self._queue: Optional[asyncio.Queue[str]] = None
 
-    async def startup(self: Self) -> None:
+    async def startup(self) -> None:
         """Initialize the broker."""
         await super().startup()
         self.read_conn = await asyncpg.connect(self.dsn, **self.connection_kwargs)
@@ -68,7 +68,7 @@ class AsyncpgBroker(AsyncBroker):
         await self.read_conn.add_listener(self.channel_name, self._notification_handler)
         self._queue = asyncio.Queue()
 
-    async def shutdown(self: Self) -> None:
+    async def shutdown(self) -> None:
         """Close all connections on shutdown."""
         await super().shutdown()
         if self.read_conn is not None:
@@ -79,7 +79,7 @@ class AsyncpgBroker(AsyncBroker):
             # must adhere to listener protocol handler signature
 
     def _notification_handler(
-        self: Self,
+        self,
         _connection: Any,
         _pid: Any,
         channel: str,
@@ -98,7 +98,7 @@ class AsyncpgBroker(AsyncBroker):
         if self._queue is not None:
             self._queue.put_nowait(payload)
 
-    async def kick(self: Self, message: BrokerMessage) -> None:
+    async def kick(self, message: BrokerMessage) -> None:
         """
         Send message to the channel.
 
@@ -131,9 +131,7 @@ class AsyncpgBroker(AsyncBroker):
                     f"NOTIFY {self.channel_name}, '{message_inserted_id}'"
                 )
 
-    async def _schedule_notification(
-        self: Self, message_id: int, delay_seconds: int
-    ) -> None:
+    async def _schedule_notification(self, message_id: int, delay_seconds: int) -> None:
         """Schedule a notification to be sent after a delay."""
         await asyncio.sleep(delay_seconds)
         if self.write_pool is None:
@@ -142,7 +140,7 @@ class AsyncpgBroker(AsyncBroker):
             # Send NOTIFY
             await conn.execute(f"NOTIFY {self.channel_name}, '{message_id}'")
 
-    async def listen(self: Self) -> AsyncGenerator[AckableMessage, None]:
+    async def listen(self) -> AsyncGenerator[AckableMessage, None]:
         """
         Listen to the channel.
 
