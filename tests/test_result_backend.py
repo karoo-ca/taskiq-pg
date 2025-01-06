@@ -5,8 +5,8 @@ import pytest
 from pydantic import BaseModel
 from taskiq import TaskiqResult
 
-from taskiq_asyncpg.exceptions import ResultIsMissingError
-from taskiq_asyncpg.result_backend import AsyncpgResultBackend
+from taskiq_pg.exceptions import ResultIsMissingError
+from taskiq_pg.result_backend import AsyncpgResultBackend
 
 _ReturnType = TypeVar("_ReturnType")
 pytestmark = pytest.mark.anyio

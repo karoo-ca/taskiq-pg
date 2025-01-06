@@ -1,6 +1,6 @@
 # TaskIQ - asyncpg
 
-TaskIQ-asyncpg is a plugin for taskiq that adds a new result backend and a new broker based on PostgreSQL and [asyncpg](https://github.com/MagicStack/asyncpg).
+TaskIQ-pg is a plugin for taskiq that adds a new result backend and a new broker based on PostgreSQL and [asyncpg](https://github.com/MagicStack/asyncpg).
 
 The broker makes use of Postgres' built in `LISTEN/NOTIFY` functionality.
 
@@ -17,13 +17,13 @@ pip install taskiq
 This project can be installed using pip:
 
 ```bash
-pip install taskiq-asyncpg
+pip install taskiq-pg
 ```
 
 Or using poetry:
 
 ```
-poetry add taskiq-asyncpg
+poetry add taskiq-pg
 ```
 
 ## Usage
@@ -34,7 +34,7 @@ An example with the broker and result backend:
 # example.py
 import asyncio
 
-from taskiq_asyncpg import AsyncpgBroker, AsyncpgResultBackend
+from taskiq_pg import AsyncpgBroker, AsyncpgResultBackend
 
 asyncpg_result_backend = AsyncpgResultBackend(
     dsn="postgres://postgres:postgres@localhost:15432/postgres",

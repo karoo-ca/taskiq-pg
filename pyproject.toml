@@ -28,17 +28,17 @@ requires-python = ">=3.8.1"
 dependencies = ["asyncpg >=0.30.0", "taskiq>=0.11.10"]
 
 [project.urls]
-Repository = "https://github.com/karoo-ca/taskiq-asyncpg"
+Repository = "https://github.com/karoo-ca/taskiq-pg"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "taskiq_asyncpg/__init__.py"
+path = "taskiq_pg/__init__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["taskiq_asyncpg"]
+include = ["taskiq_pg"]
 
 [dependency-groups]
 dev = [

@@ -6,7 +6,7 @@ from typing import Any, AsyncGenerator, Callable, Dict, Optional, TypeVar
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
 
-from taskiq_asyncpg.broker_queries import (
+from taskiq_pg.broker_queries import (
     CREATE_TABLE_QUERY,
     DELETE_MESSAGE_QUERY,
     INSERT_MESSAGE_QUERY,

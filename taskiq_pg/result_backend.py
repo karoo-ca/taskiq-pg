@@ -12,8 +12,8 @@ from taskiq.abc.serializer import TaskiqSerializer
 from taskiq.compat import model_dump, model_validate
 from taskiq.serializers import PickleSerializer
 
-from taskiq_asyncpg.exceptions import ResultIsMissingError
-from taskiq_asyncpg.queries import (
+from taskiq_pg.exceptions import ResultIsMissingError
+from taskiq_pg.queries import (
     CREATE_INDEX_QUERY,
     CREATE_TABLE_QUERY,
     DELETE_RESULT_QUERY,

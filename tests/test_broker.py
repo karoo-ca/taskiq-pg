@@ -7,8 +7,8 @@ import pytest
 from taskiq import AckableMessage, BrokerMessage
 from taskiq.utils import maybe_awaitable
 
-from taskiq_asyncpg import AsyncpgBroker
-from taskiq_asyncpg.broker_queries import (
+from taskiq_pg import AsyncpgBroker
+from taskiq_pg.broker_queries import (
     INSERT_MESSAGE_QUERY,
 )
 

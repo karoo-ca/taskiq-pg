@@ -5,8 +5,8 @@ from typing import AsyncGenerator
 
 import pytest
 
-from taskiq_asyncpg.broker import AsyncpgBroker
-from taskiq_asyncpg.result_backend import AsyncpgResultBackend
+from taskiq_pg.broker import AsyncpgBroker
+from taskiq_pg.result_backend import AsyncpgResultBackend
 
 
 @pytest.fixture(scope="session")

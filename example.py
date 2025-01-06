@@ -21,7 +21,7 @@ is_err=False log=None return_value='All problems are solved!' execution_time=1.0
 
 import asyncio
 
-from taskiq_asyncpg import AsyncpgBroker, AsyncpgResultBackend
+from taskiq_pg import AsyncpgBroker, AsyncpgResultBackend
 
 asyncpg_result_backend: AsyncpgResultBackend[object] = AsyncpgResultBackend(
     dsn="postgres://postgres:postgres@localhost:15432/postgres",

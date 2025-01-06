@@ -996,7 +996,7 @@ wheels = [
 ]
 
 [[package]]
-name = "taskiq-asyncpg"
+name = "taskiq-pg"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

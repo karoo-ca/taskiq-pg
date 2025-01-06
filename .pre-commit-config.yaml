@@ -30,7 +30,7 @@ repos:
         types: [python]
         args:
           - "--fix"
-          - "taskiq_psqlpy"
+          - "taskiq_pg"
           - "tests"
 
       - id: mypy

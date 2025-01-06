@@ -1,4 +1,4 @@
-name: Testing taskiq-asyncpg
+name: test
 
 on: pull_request
 
@@ -33,7 +33,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: taskiqasyncpg
+          POSTGRES_DB: taskiqpg
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "${{ matrix.py_version }}"
       - name: Run pytest check
-        run: uv run pytest -vv -n auto --cov="taskiq_asyncpg" .
+        run: uv run pytest -vv -n auto --cov="taskiq_pg" .
       - name: Generate report
         run: uv run coverage xml
       - name: Upload coverage reports to Codecov with GitHub Action
