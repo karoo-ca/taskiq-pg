@@ -65,7 +65,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Example:
+### Run example
 
 **shell 1: start a worker**
 
@@ -82,6 +82,41 @@ $ taskiq worker example:broker
 ```sh
 $ python example.py
 is_err=False log=None return_value='All problems are solved!' execution_time=1.0 labels={} error=None
+
+```
+
+### Details
+
+The result backend stores the data as raw bytes by default, you can decode them in SQL:
+
+```sql
+select convert_from(result, 'UTF8') from taskiq_results;
+-- Example results:
+-- - success:
+--   {
+--     "is_err": false,
+--     "log": null,
+--     "return_value": "All problems are solved!",
+--     "execution_time": 1.0,
+--     "labels": {},
+--     "error": null
+--   }
+-- - failure:
+--   {
+--     "is_err": true,
+--     "log": null,
+--     "return_value": null,
+--     "execution_time": 10.0,
+--     "labels": {},
+--     "error": {
+--       "exc_type": "ValueError",
+--       "exc_message": ["Borked"],
+--       "exc_module": "builtins",
+--       "exc_cause": null,
+--       "exc_context": null,
+--       "exc_suppress_context": false
+--     }
+--   }
 ```
 
 ## AsyncpgResultBackend configuration
@@ -91,6 +126,17 @@ is_err=False log=None return_value='All problems are solved!' execution_time=1.0
 - `table_name`: name of the table in PostgreSQL to store TaskIQ results.
 - `field_for_task_id`: type of a field for `task_id`, you may need it if you want to have length of task_id more than 255 symbols.
 - `**connect_kwargs`: additional connection parameters, you can read more about it in [asyncpg](https://github.com/MagicStack/asyncpg) repository.
+
+## AsyncpgBroker configuration
+
+- `dsn`: Connection string to PostgreSQL.
+- `result_backend`: Custom result backend.
+- `task_id_generator`: Custom task_id generator.
+- `channel_name`: Name of the channel to listen on.
+- `table_name`: Name of the table to store messages.
+- `max_retry_attempts`: Maximum number of message processing attempts.
+- `connection_kwargs`: Additional arguments for asyncpg connection.
+- `pool_kwargs`: Additional arguments for asyncpg pool creation.
 
 ## Acknowledgements
 

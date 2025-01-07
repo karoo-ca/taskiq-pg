@@ -25,7 +25,10 @@ keywords = [
   "asyncpg",
 ]
 requires-python = ">=3.8.1"
-dependencies = ["asyncpg >=0.30.0", "taskiq>=0.11.10"]
+dependencies = [
+    "asyncpg >=0.30.0",
+    "taskiq>=0.11.10",
+]
 
 [project.urls]
 Repository = "https://github.com/karoo-ca/taskiq-pg"

@@ -996,6 +996,19 @@ wheels = [
 ]
 
 [[package]]
+name = "taskiq-dependencies"
+version = "1.5.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "graphlib-backport", marker = "python_full_version < '3.9'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/19/53/8c937de85dbd0e5abcb55788904e6c60304ef18cf68e03bcd3b9e6db6d34/taskiq_dependencies-1.5.5.tar.gz", hash = "sha256:76abcf5e16ddf3e8fb45660406be09d50d2feb416841de7e96efadc53c123429", size = 15161 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/b1/d7a49b2e2203e8c61d76ca0df6e171fb6606be189f1cff72b9202adcddd3/taskiq_dependencies-1.5.5-py3-none-any.whl", hash = "sha256:a1e2e60251c23ce8318dbeb9a461fb3a951e24140c38a46509e5c5d02cc2eb6f", size = 13798 },
+]
+
+[[package]]
 name = "taskiq-pg"
 version = "0.1.0"
 source = { editable = "." }
@@ -1032,19 +1045,6 @@ dev = [
     { name = "ruff", specifier = ">=0.3.4" },
     { name = "wemake-python-styleguide", specifier = ">=0.18.0" },
     { name = "yesqa", specifier = ">=1.4.0" },
-]
-
-[[package]]
-name = "taskiq-dependencies"
-version = "1.5.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "graphlib-backport", marker = "python_full_version < '3.9'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.10'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/19/53/8c937de85dbd0e5abcb55788904e6c60304ef18cf68e03bcd3b9e6db6d34/taskiq_dependencies-1.5.5.tar.gz", hash = "sha256:76abcf5e16ddf3e8fb45660406be09d50d2feb416841de7e96efadc53c123429", size = 15161 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1f/b1/d7a49b2e2203e8c61d76ca0df6e171fb6606be189f1cff72b9202adcddd3/taskiq_dependencies-1.5.5-py3-none-any.whl", hash = "sha256:a1e2e60251c23ce8318dbeb9a461fb3a951e24140c38a46509e5c5d02cc2eb6f", size = 13798 },
 ]
 
 [[package]]

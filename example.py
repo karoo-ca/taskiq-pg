@@ -21,10 +21,13 @@ is_err=False log=None return_value='All problems are solved!' execution_time=1.0
 
 import asyncio
 
+from taskiq.serializers import JSONSerializer
+
 from taskiq_pg import AsyncpgBroker, AsyncpgResultBackend
 
 asyncpg_result_backend: AsyncpgResultBackend[object] = AsyncpgResultBackend(
     dsn="postgres://postgres:postgres@localhost:15432/postgres",
+    serializer=JSONSerializer(),
 )
 
 broker = AsyncpgBroker(
@@ -39,12 +42,23 @@ async def best_task_ever() -> str:
     return "All problems are solved!"
 
 
+@broker.task()
+async def worst_task_ever() -> str:
+    """Solve all problems in the world."""
+    await asyncio.sleep(10.0)
+    msg = "Borked"
+    raise ValueError(msg)
+    return "borked"
+
+
 async def main() -> None:
     """Main."""
     await broker.startup()
     task = await best_task_ever.kiq()
     result = await task.wait_result(timeout=2)
     print(result)  # noqa: T201
+    task = await worst_task_ever.kiq()  # even though this fails, broker continues on
+    print(f"Save reference to {task.task_id} so you can look at result later")  # noqa: T201
     await broker.shutdown()
 
 
