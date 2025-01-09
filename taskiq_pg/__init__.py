@@ -1,7 +1,7 @@
 from taskiq_pg.broker import AsyncpgBroker
 from taskiq_pg.result_backend import AsyncpgResultBackend
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "AsyncpgBroker",
