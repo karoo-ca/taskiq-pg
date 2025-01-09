@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.1...v0.1.2) (2025-01-09)
+
+
+### Bug Fixes
+
+* docs and example ([9a18a4a](https://github.com/karoo-ca/taskiq-pg/commit/9a18a4a6b7821cb403cf6294f020363fb9e0008f))
+
 ## [0.1.1](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.0...v0.1.1) (2025-01-07)
 
 
