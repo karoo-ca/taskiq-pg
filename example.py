@@ -9,6 +9,22 @@ $ taskiq worker example:broker
 [2025-01-06 11:48:14,171][taskiq.worker][INFO   ][MainProcess] Starting 2 worker processes.
 [2025-01-06 11:48:14,175][taskiq.process-manager][INFO   ][MainProcess] Started process worker-0 with pid 80436
 [2025-01-06 11:48:14,176][taskiq.process-manager][INFO   ][MainProcess] Started process worker-1 with pid 80437
+Exception found while executing function: Borked
+Traceback (most recent call last):
+  File "/Users/oliverlambson/Github/karoo/taskiq-pg/.venv/lib/python3.13/site-packages/taskiq/receiver/receiver.py", line 271, in run_task
+    returned = await target_future
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/oliverlambson/Github/karoo/taskiq-pg/example.py", line 50, in worst_task_ever
+    raise ValueError(msg)
+ValueError: Borked
+Exception found while executing function: Borked
+Traceback (most recent call last):
+  File "/Users/oliverlambson/Github/karoo/taskiq-pg/.venv/lib/python3.13/site-packages/taskiq/receiver/receiver.py", line 271, in run_task
+    returned = await target_future
+               ^^^^^^^^^^^^^^^^^^^
+  File "/Users/oliverlambson/Github/karoo/taskiq-pg/example.py", line 50, in worst_task_ever
+    raise ValueError(msg)
+ValueError: Borked
 ```
 
 **shell 2: run the example script**
@@ -16,6 +32,7 @@ $ taskiq worker example:broker
 ```sh
 $ python example.py
 is_err=False log=None return_value='All problems are solved!' execution_time=1.0 labels={} error=None
+Save reference to fc238b66b9554315b5ca3d16bcab5a8d so you can look at result later
 ```
 """  # noqa: E501
 

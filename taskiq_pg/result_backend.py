@@ -121,7 +121,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         Retrieve result from the task.
 
         :param task_id: task's id.
-        :param with_logs: if True it will download task's logs.
+        :param with_logs: if True it will download task's logs. (deprecated in taskiq)
         :raises ResultIsMissingError: if there is no result when trying to get it.
         :return: TaskiqResult.
         """
