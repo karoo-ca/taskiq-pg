@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.2...v0.1.3) (2025-01-17)
+
+
+### Bug Fixes
+
+* add py.typed marker ([#12](https://github.com/karoo-ca/taskiq-pg/issues/12)) ([a217d92](https://github.com/karoo-ca/taskiq-pg/commit/a217d92263c5003835348ce9fe33ed5d611451da))
+
 ## [0.1.2](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.1...v0.1.2) (2025-01-09)
 
 
