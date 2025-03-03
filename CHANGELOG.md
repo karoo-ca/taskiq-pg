@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.3...v0.1.4) (2025-03-03)
+
+
+### Bug Fixes
+
+* use write connection to delete instead of read connection ([#14](https://github.com/karoo-ca/taskiq-pg/issues/14)) ([85eb9fe](https://github.com/karoo-ca/taskiq-pg/commit/85eb9fe82d69adf882fa3524097aa0383bfa20fd))
+
 ## [0.1.3](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.2...v0.1.3) (2025-01-17)
 
 
