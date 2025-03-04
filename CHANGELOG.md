@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.5...v0.1.6) (2025-03-04)
+
+
+### Bug Fixes
+
+* drop python 3.8 support (EOL) ([#19](https://github.com/karoo-ca/taskiq-pg/issues/19)) ([10572d6](https://github.com/karoo-ca/taskiq-pg/commit/10572d6ab1abe5432954bd9369a37a62fea2ce5d))
+
 ## [0.1.5](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.4...v0.1.5) (2025-03-04)
 
 
