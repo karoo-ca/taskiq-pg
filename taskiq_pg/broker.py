@@ -10,11 +10,11 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    override,
 )
 
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
+from typing_extensions import override
 
 from taskiq_pg.broker_queries import (
     CREATE_TABLE_QUERY,

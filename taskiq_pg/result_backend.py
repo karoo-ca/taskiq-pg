@@ -5,7 +5,6 @@ from typing import (
     Optional,
     TypeVar,
     cast,
-    override,
 )
 
 import asyncpg
@@ -13,6 +12,7 @@ from taskiq import AsyncResultBackend, TaskiqResult
 from taskiq.abc.serializer import TaskiqSerializer
 from taskiq.compat import model_dump, model_validate
 from taskiq.serializers import PickleSerializer
+from typing_extensions import override
 
 from taskiq_pg.exceptions import ResultIsMissingError
 from taskiq_pg.queries import (
