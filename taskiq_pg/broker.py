@@ -1,7 +1,17 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncGenerator, Callable, Dict, Optional, TypeVar
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Dict,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    override,
+)
 
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
@@ -47,30 +57,40 @@ class AsyncpgBroker(AsyncBroker):
             result_backend=result_backend,
             task_id_generator=task_id_generator,
         )
-        self.dsn = dsn
-        self.channel_name = channel_name
-        self.table_name = table_name
-        self.connection_kwargs = connection_kwargs if connection_kwargs else {}
-        self.pool_kwargs = pool_kwargs if pool_kwargs else {}
-        self.max_retry_attempts = max_retry_attempts
-        self.read_conn: Optional[asyncpg.Connection] = None
-        self.write_pool: Optional[asyncpg.pool.Pool] = None
+        self.dsn: str = dsn
+        self.channel_name: str = channel_name
+        self.table_name: str = table_name
+        self.connection_kwargs: dict[str, Any] = (
+            connection_kwargs if connection_kwargs else {}
+        )
+        self.pool_kwargs: dict[str, Any] = pool_kwargs if pool_kwargs else {}
+        self.max_retry_attempts: int = max_retry_attempts
+        self.read_conn: Optional["asyncpg.Connection[asyncpg.Record]"] = None
+        self.write_pool: Optional["asyncpg.pool.Pool[asyncpg.Record]"] = None
         self._queue: Optional[asyncio.Queue[str]] = None
 
+    @override
     async def startup(self) -> None:
         """Initialize the broker."""
         await super().startup()
+
         self.read_conn = await asyncpg.connect(self.dsn, **self.connection_kwargs)
         self.write_pool = await asyncpg.create_pool(self.dsn, **self.pool_kwargs)
 
-        # Create messages table if it doesn't exist
         if self.read_conn is None:
-            raise ValueError("self.read_conn is None")
-        await self.read_conn.execute(CREATE_TABLE_QUERY.format(self.table_name))
-        # Listen to the specified channel
+            msg = "read_conn not initialized"
+            raise RuntimeError(msg)
+        if self.write_pool is None:
+            msg = "write_pool not initialized"
+            raise RuntimeError(msg)
+
+        async with self.write_pool.acquire() as conn:
+            _ = await conn.execute(CREATE_TABLE_QUERY.format(self.table_name))
+
         await self.read_conn.add_listener(self.channel_name, self._notification_handler)
         self._queue = asyncio.Queue()
 
+    @override
     async def shutdown(self) -> None:
         """Close all connections on shutdown."""
         await super().shutdown()
@@ -79,28 +99,31 @@ class AsyncpgBroker(AsyncBroker):
         if self.write_pool is not None:
             await self.write_pool.close()
 
-            # must adhere to listener protocol handler signature
-
     def _notification_handler(
         self,
-        _connection: Any,
-        _pid: Any,
+        con_ref: Union[
+            "asyncpg.Connection[asyncpg.Record]",
+            "asyncpg.pool.PoolConnectionProxy[asyncpg.Record]",
+        ],
+        pid: int,
         channel: str,
-        payload: str,
+        payload: object,
+        /,
     ) -> None:
         """Handle NOTIFY messages.
 
         From asyncpg.connection.add_listener docstring:
             A callable or a coroutine function receiving the following arguments:
-            **connection**: a Connection the callback is registered with;
+            **con_ref**: a Connection the callback is registered with;
             **pid**: PID of the Postgres server that sent the notification;
             **channel**: name of the channel the notification was sent to;
             **payload**: the payload.
         """
         logger.debug(f"Received notification on channel {channel}: {payload}")
         if self._queue is not None:
-            self._queue.put_nowait(payload)
+            self._queue.put_nowait(str(payload))
 
+    @override
     async def kick(self, message: BrokerMessage) -> None:
         """
         Send message to the channel.
@@ -114,23 +137,26 @@ class AsyncpgBroker(AsyncBroker):
 
         async with self.write_pool.acquire() as conn:
             # Insert the message into the database
-            message_inserted_id = await conn.fetchval(
-                INSERT_MESSAGE_QUERY.format(self.table_name),
-                message.task_id,
-                message.task_name,
-                message.message.decode(),
-                json.dumps(message.labels),
+            message_inserted_id = cast(
+                int,
+                await conn.fetchval(
+                    INSERT_MESSAGE_QUERY.format(self.table_name),
+                    message.task_id,
+                    message.task_name,
+                    message.message.decode(),
+                    json.dumps(message.labels),
+                ),
             )
 
             delay_value = message.labels.get("delay")
             if delay_value is not None:
                 delay_seconds = int(delay_value)
-                asyncio.create_task(  # noqa: RUF006
+                _ = asyncio.create_task(  # noqa: RUF006
                     self._schedule_notification(message_inserted_id, delay_seconds)
                 )
             else:
                 # Send a NOTIFY with the message ID as payload
-                await conn.execute(
+                _ = await conn.execute(
                     f"NOTIFY {self.channel_name}, '{message_inserted_id}'"
                 )
 
@@ -141,8 +167,9 @@ class AsyncpgBroker(AsyncBroker):
             return
         async with self.write_pool.acquire() as conn:
             # Send NOTIFY
-            await conn.execute(f"NOTIFY {self.channel_name}, '{message_id}'")
+            _ = await conn.execute(f"NOTIFY {self.channel_name}, '{message_id}'")
 
+    @override
     async def listen(self) -> AsyncGenerator[AckableMessage, None]:
         """
         Listen to the channel.
@@ -159,9 +186,7 @@ class AsyncpgBroker(AsyncBroker):
         while True:
             try:
                 payload = await self._queue.get()
-                # Payload is the message ID
                 message_id = int(payload)
-                # Fetch the message from database
                 message_row = await self.read_conn.fetchrow(
                     SELECT_MESSAGE_QUERY.format(self.table_name), message_id
                 )
@@ -170,16 +195,21 @@ class AsyncpgBroker(AsyncBroker):
                         f"Message with id {message_id} not found in database."
                     )
                     continue
-                # Construct AckableMessage
-                message_data = message_row["message"].encode()
+                if message_row.get("message") is None:
+                    msg = "Message row does not have 'message' column"
+                    raise ValueError(msg)
+                message_str = message_row["message"]
+                if not isinstance(message_str, str):
+                    msg = "message is not a string"
+                    raise ValueError(msg)
+                message_data = message_str.encode()
 
                 async def ack(*, _message_id: int = message_id) -> None:
                     if self.write_pool is None:
                         raise ValueError("Call startup before starting listening.")
 
-                    # Delete the message from the database
                     async with self.write_pool.acquire() as conn:
-                        await conn.execute(
+                        _ = await conn.execute(
                             DELETE_MESSAGE_QUERY.format(self.table_name),
                             _message_id,
                         )

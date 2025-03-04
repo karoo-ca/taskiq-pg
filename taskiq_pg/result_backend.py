@@ -4,6 +4,8 @@ from typing import (
     Literal,
     Optional,
     TypeVar,
+    cast,
+    override,
 )
 
 import asyncpg
@@ -52,34 +54,42 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         self.field_for_task_id: Final = field_for_task_id
         self.connect_kwargs: Final = connect_kwargs
         self.serializer = serializer or PickleSerializer()
-        self._database_pool: asyncpg.Pool
+        self._database_pool: "asyncpg.Pool[Any]"
 
+    @override
     async def startup(self) -> None:
         """Initialize the result backend.
 
         Construct new connection pool and create new table for results if not exists.
         """
-        self._database_pool = await asyncpg.create_pool(
+        _database_pool = await asyncpg.create_pool(
             dsn=self.dsn,
             **self.connect_kwargs,
         )
-        await self._database_pool.execute(
+        if _database_pool is None:
+            msg = "Database pool not initialized"
+            raise RuntimeError(msg)
+        self._database_pool = _database_pool
+
+        _ = await self._database_pool.execute(
             CREATE_TABLE_QUERY.format(
                 self.table_name,
                 self.field_for_task_id,
             ),
         )
-        await self._database_pool.execute(
+        _ = await self._database_pool.execute(
             CREATE_INDEX_QUERY.format(
                 self.table_name,
                 self.table_name,
             ),
         )
 
+    @override
     async def shutdown(self) -> None:
         """Close the connection pool."""
         await self._database_pool.close()
 
+    @override
     async def set_result(
         self,
         task_id: str,
@@ -90,7 +100,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         :param task_id: ID of the task.
         :param result: result of the task.
         """
-        await self._database_pool.execute(
+        _ = await self._database_pool.execute(
             INSERT_RESULT_QUERY.format(
                 self.table_name,
             ),
@@ -98,20 +108,24 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             self.serializer.dumpb(model_dump(result)),
         )
 
+    @override
     async def is_result_ready(self, task_id: str) -> bool:
         """Returns whether the result is ready.
 
         :param task_id: ID of the task.
         :returns: True if the result is ready else False.
         """
-        exists = await self._database_pool.fetchval(
-            IS_RESULT_EXISTS_QUERY.format(
-                self.table_name,
+        return cast(
+            bool,
+            await self._database_pool.fetchval(
+                IS_RESULT_EXISTS_QUERY.format(
+                    self.table_name,
+                ),
+                task_id,
             ),
-            task_id,
         )
-        return bool(exists)
 
+    @override
     async def get_result(
         self,
         task_id: str,
@@ -125,18 +139,21 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         :raises ResultIsMissingError: if there is no result when trying to get it.
         :return: TaskiqResult.
         """
-        result_in_bytes = await self._database_pool.fetchval(
-            SELECT_RESULT_QUERY.format(
-                self.table_name,
+        result_in_bytes = cast(
+            bytes,
+            await self._database_pool.fetchval(
+                SELECT_RESULT_QUERY.format(
+                    self.table_name,
+                ),
+                task_id,
             ),
-            task_id,
         )
         if result_in_bytes is None:
             raise ResultIsMissingError(
                 f"Cannot find record with task_id = {task_id} in PostgreSQL",
             )
         if not self.keep_results:
-            await self._database_pool.execute(
+            _ = await self._database_pool.execute(
                 DELETE_RESULT_QUERY.format(
                     self.table_name,
                 ),
