@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.4...v0.1.5) (2025-03-04)
+
+
+### Bug Fixes
+
+* clean up type annotations ([#16](https://github.com/karoo-ca/taskiq-pg/issues/16)) ([8d3f5d0](https://github.com/karoo-ca/taskiq-pg/commit/8d3f5d0fd0d7ae338b30bb42a6fbf22f0b5bcb18))
+
 ## [0.1.4](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.3...v0.1.4) (2025-03-03)
 
 
