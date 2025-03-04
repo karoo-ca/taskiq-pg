@@ -1,11 +1,10 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncGenerator
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
-    Dict,
     Optional,
     TypeVar,
     Union,
@@ -38,8 +37,8 @@ class AsyncpgBroker(AsyncBroker):
         channel_name: str = "taskiq",
         table_name: str = "taskiq_messages",
         max_retry_attempts: int = 5,
-        connection_kwargs: Optional[Dict[str, Any]] = None,
-        pool_kwargs: Optional[Dict[str, Any]] = None,
+        connection_kwargs: Optional[dict[str, Any]] = None,
+        pool_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Construct a new broker.
