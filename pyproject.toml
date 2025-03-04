@@ -53,6 +53,7 @@ dev = [
   "pytest-cov>=4.0.0",
   "wemake-python-styleguide>=0.18.0",
   "ruff>=0.3.4",
+  "asyncpg-stubs>=0.30.0",
 ]
 
 [tool.mypy]
