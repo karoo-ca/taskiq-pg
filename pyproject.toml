@@ -58,14 +58,8 @@ dev = [
 
 [tool.mypy]
 strict = true
-ignore_missing_imports = true
-allow_subclassing_any = true
-allow_untyped_calls = true
 pretty = true
 show_error_codes = true
-implicit_reexport = true
-allow_untyped_decorators = true
-warn_return_any = false
 
 [tool.ruff]
 line-length = 88
