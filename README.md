@@ -34,10 +34,12 @@ An example with the broker and result backend:
 # example.py
 import asyncio
 
+from taskiq.serializers.json_serializer import JSONSerializer
 from taskiq_pg import AsyncpgBroker, AsyncpgResultBackend
 
 asyncpg_result_backend = AsyncpgResultBackend(
     dsn="postgres://postgres:postgres@localhost:15432/postgres",
+    serializer=JSONSerializer(),
 )
 
 broker = AsyncpgBroker(
