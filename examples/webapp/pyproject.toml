@@ -1,0 +1,39 @@
+[project]
+name = "webapp"
+version = "0.1.0"
+description = "Demo fastapi app with taskiq"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "taskiq-pg",
+    "taskiq>=0.11.13",
+    "taskiq-fastapi>=0.3.3",
+    "fastapi>=0.115.11",
+    "that-depends>=2.2.0",
+    "pydantic>=2.10.6",
+    "pydantic-settings>=2.8.1",
+    "uvicorn>=0.34.0",
+]
+
+[project.scripts]
+webapp = "webapp.webapp:entrypoint"
+worker = "webapp.worker:entrypoint"
+db-start = "webapp.scripts.db:start"
+db-stop = "webapp.scripts.db:stop"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+taskiq-pg = { path = "../../" }
+
+[tool.mypy]
+plugins = ['pydantic.mypy']
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "pytest>=8.3.5",
+    "ruff>=0.9.9",
+]
