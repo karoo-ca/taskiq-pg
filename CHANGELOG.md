@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.7...v0.2.0) (2025-03-06)
+
+
+### Features
+
+* add dependency injection for dsn ([#23](https://github.com/karoo-ca/taskiq-pg/issues/23)) ([72170fe](https://github.com/karoo-ca/taskiq-pg/commit/72170fe15f26acb7640e89fd0fa498439cf41d08))
+
 ## [0.1.7](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.6...v0.1.7) (2025-03-06)
 
 
