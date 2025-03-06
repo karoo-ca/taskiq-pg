@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.6...v0.1.7) (2025-03-06)
+
+
+### Documentation
+
+* readme correction ([1c015a0](https://github.com/karoo-ca/taskiq-pg/commit/1c015a0f25b236a4c8699cd4ad7e01bd6383f3ab))
+
 ## [0.1.6](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.5...v0.1.6) (2025-03-04)
 
 
