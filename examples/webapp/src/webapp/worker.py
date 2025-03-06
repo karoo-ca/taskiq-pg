@@ -3,7 +3,7 @@ import logging
 
 import taskiq_fastapi  # type: ignore[import-untyped]
 from taskiq.cli.worker.args import WorkerArgs
-from taskiq.cli.worker.run import run_worker
+from taskiq.cli.worker.run import start_listen
 from taskiq.serializers import JSONSerializer
 from that_depends import Provide, container_context, inject
 
@@ -26,7 +26,7 @@ taskiq_fastapi.init(broker, "webapp.webapp:make_app")
 
 @broker.task()
 @container_context()
-@inject()
+@inject
 async def so_much_effort(settings: Settings = Provide[Dependencies.settings]) -> str:
     """Worker task."""
     logger.info("starting so_much_effort (using db=%s)", settings.PGDATABASE)
@@ -39,6 +39,13 @@ def entrypoint() -> int | None:
     """Entrypoint to run worker."""
     logging.basicConfig(level=logging.INFO)
 
-    args = WorkerArgs(broker="webapp.worker:broker", modules=[], workers=1)
-    return run_worker(args)
-    # NOTE: logging of worker tasks doesn't go to stdout for some reason?
+    args = WorkerArgs(
+        broker="webapp.worker:broker",
+        modules=["webapp.tasks"],
+        workers=1,
+        configure_logging=False,
+    )
+    # since we want parallelism to be handled by multiple containers, instead of
+    # multiprocessing on one container, we use the start_listen method that is
+    # used within taskiq's run_worker method:
+    return start_listen(args)
