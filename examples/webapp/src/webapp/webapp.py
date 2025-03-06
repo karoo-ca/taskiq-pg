@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from that_depends.providers import DIContextMiddleware
 
 from webapp.dependencies import Dependencies
+from webapp.tasks.special import special_job
 from webapp.worker import broker, so_much_effort
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,13 @@ def make_app() -> FastAPI:
     @app.post("/do-work")
     async def do_work() -> str:  # pyright: ignore[reportUnusedFunction]
         task = await so_much_effort.kiq()
+        result = await task.wait_result(timeout=2, with_logs=True)
+        logger.info("result=%s", result)
+        return result.return_value
+
+    @app.post("/do-special-work")
+    async def do_special_work() -> str:  # pyright: ignore[reportUnusedFunction]
+        task = await special_job.kiq()
         result = await task.wait_result(timeout=2, with_logs=True)
         logger.info("result=%s", result)
         return result.return_value

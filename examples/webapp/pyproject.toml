@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.10.6",
     "pydantic-settings>=2.8.1",
     "uvicorn>=0.34.0",
+    "uvloop>=0.21.0",  # explicit b/c we want uvloop for taskiq
 ]
 
 [project.scripts]
