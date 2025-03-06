@@ -65,7 +65,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         self._database_pool: "asyncpg.Pool[Any]"
 
     @property
-    def dsn(self) -> str | None:
+    def dsn(self) -> Optional[str]:
         """Get the DSN string.
 
         Returns the DSN string or None if not set.
