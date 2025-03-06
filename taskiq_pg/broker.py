@@ -31,7 +31,9 @@ class AsyncpgBroker(AsyncBroker):
 
     def __init__(
         self,
-        dsn: str = "postgresql://postgres:postgres@localhost:5432/postgres",
+        dsn: Union[
+            str, Callable[[], str]
+        ] = "postgresql://postgres:postgres@localhost:5432/postgres",
         result_backend: Optional[AsyncResultBackend[_T]] = None,
         task_id_generator: Optional[Callable[[], str]] = None,
         channel_name: str = "taskiq",
@@ -43,7 +45,7 @@ class AsyncpgBroker(AsyncBroker):
         """
         Construct a new broker.
 
-        :param dsn: Connection string to PostgreSQL.
+        :param dsn: connection string to PostgreSQL, or callable returning one.
         :param result_backend: Custom result backend.
         :param task_id_generator: Custom task_id generator.
         :param channel_name: Name of the channel to listen on.
@@ -56,7 +58,7 @@ class AsyncpgBroker(AsyncBroker):
             result_backend=result_backend,
             task_id_generator=task_id_generator,
         )
-        self.dsn: str = dsn
+        self._dsn: Union[str, Callable[[], str]] = dsn
         self.channel_name: str = channel_name
         self.table_name: str = table_name
         self.connection_kwargs: dict[str, Any] = (
@@ -67,6 +69,16 @@ class AsyncpgBroker(AsyncBroker):
         self.read_conn: Optional["asyncpg.Connection[asyncpg.Record]"] = None
         self.write_pool: Optional["asyncpg.pool.Pool[asyncpg.Record]"] = None
         self._queue: Optional[asyncio.Queue[str]] = None
+
+    @property
+    def dsn(self) -> str:
+        """Get the DSN string.
+
+        Returns the DSN string or None if not set.
+        """
+        if callable(self._dsn):
+            return self._dsn()
+        return self._dsn
 
     @override
     async def startup(self) -> None:
