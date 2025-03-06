@@ -9,6 +9,7 @@ from webapp.worker import broker
 
 logger = logging.getLogger(__name__)
 
+
 @broker.task()
 @container_context()
 @inject
