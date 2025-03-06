@@ -13,13 +13,17 @@ from webapp.settings import Settings
 
 logger = logging.getLogger(__name__)
 
+
+@container_context()
+def _get_db_dsn() -> str:
+    return Dependencies.settings.sync_resolve().db_url
+
+
 result_backend: AsyncpgResultBackend[object] = AsyncpgResultBackend(
-    dsn=Dependencies.settings.sync_resolve().db_url,
+    dsn=_get_db_dsn,
     serializer=JSONSerializer(),
 )
-broker = AsyncpgBroker(
-    dsn=Dependencies.settings.sync_resolve().db_url
-).with_result_backend(result_backend)
+broker = AsyncpgBroker(dsn=_get_db_dsn).with_result_backend(result_backend)
 
 taskiq_fastapi.init(broker, "webapp.webapp:make_app")
 

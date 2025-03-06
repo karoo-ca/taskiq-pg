@@ -1,9 +1,11 @@
 from typing import (
     Any,
+    Callable,
     Final,
     Literal,
     Optional,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -32,7 +34,10 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
 
     def __init__(
         self,
-        dsn: Optional[str] = "postgres://postgres:postgres@localhost:5432/postgres",
+        dsn: Union[
+            Optional[str],
+            Callable[[], str],
+        ] = "postgres://postgres:postgres@localhost:5432/postgres",
         keep_results: bool = True,
         table_name: str = "taskiq_results",
         field_for_task_id: Literal["VarChar", "Text"] = "VarChar",
@@ -41,20 +46,33 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
     ) -> None:
         """Construct new result backend.
 
-        :param dsn: connection string to PostgreSQL.
+        :param dsn: connection string to PostgreSQL, or callable returning one.
         :param keep_results: flag to not remove results from the database after reading.
         :param table_name: name of the table to store results.
         :param field_for_task_id: type of the field to store task_id.
         :param serializer: serializer class to serialize/deserialize result from task.
         :param connect_kwargs: additional arguments for asyncpg `create_pool` function.
         """
-        self.dsn: Final = dsn
+        self._dsn: Union[
+            Optional[str],
+            Callable[[], str],
+        ] = dsn
         self.keep_results: Final = keep_results
         self.table_name: Final = table_name
         self.field_for_task_id: Final = field_for_task_id
         self.connect_kwargs: Final = connect_kwargs
         self.serializer = serializer or PickleSerializer()
         self._database_pool: "asyncpg.Pool[Any]"
+
+    @property
+    def dsn(self) -> Optional[str]:
+        """Get the DSN string.
+
+        Returns the DSN string or None if not set.
+        """
+        if callable(self._dsn):
+            return self._dsn()
+        return self._dsn
 
     @override
     async def startup(self) -> None:
