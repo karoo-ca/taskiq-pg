@@ -16,6 +16,7 @@ from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessag
 from typing_extensions import override
 
 from taskiq_pg.broker_queries import (
+    CREATE_SCHEMA_QUERY,
     CREATE_TABLE_QUERY,
     DELETE_MESSAGE_QUERY,
     INSERT_MESSAGE_QUERY,
@@ -24,6 +25,8 @@ from taskiq_pg.broker_queries import (
 
 _T = TypeVar("_T")
 logger = logging.getLogger("taskiq.asyncpg_broker")
+
+DEFAULT_SHEMA = "public"
 
 
 class AsyncpgBroker(AsyncBroker):
@@ -37,6 +40,7 @@ class AsyncpgBroker(AsyncBroker):
         result_backend: Optional[AsyncResultBackend[_T]] = None,
         task_id_generator: Optional[Callable[[], str]] = None,
         channel_name: str = "taskiq",
+        schema_name: str = DEFAULT_SHEMA,
         table_name: str = "taskiq_messages",
         max_retry_attempts: int = 5,
         connection_kwargs: Optional[dict[str, Any]] = None,
@@ -60,6 +64,7 @@ class AsyncpgBroker(AsyncBroker):
         )
         self._dsn: Union[str, Callable[[], str]] = dsn
         self.channel_name: str = channel_name
+        self.schema_name: str = schema_name
         self.table_name: str = table_name
         self.connection_kwargs: dict[str, Any] = (
             connection_kwargs if connection_kwargs else {}
@@ -96,7 +101,11 @@ class AsyncpgBroker(AsyncBroker):
             raise RuntimeError(msg)
 
         async with self.write_pool.acquire() as conn:
-            _ = await conn.execute(CREATE_TABLE_QUERY.format(self.table_name))
+            if self.schema_name != DEFAULT_SHEMA:
+                _ = await conn.execute(CREATE_SCHEMA_QUERY.format(self.schema_name))
+            _ = await conn.execute(
+                CREATE_TABLE_QUERY.format(self.schema_name, self.table_name)
+            )
 
         await self.read_conn.add_listener(self.channel_name, self._notification_handler)
         self._queue = asyncio.Queue()
@@ -151,7 +160,7 @@ class AsyncpgBroker(AsyncBroker):
             message_inserted_id = cast(
                 int,
                 await conn.fetchval(
-                    INSERT_MESSAGE_QUERY.format(self.table_name),
+                    INSERT_MESSAGE_QUERY.format(self.schema_name, self.table_name),
                     message.task_id,
                     message.task_name,
                     message.message.decode(),
@@ -199,7 +208,8 @@ class AsyncpgBroker(AsyncBroker):
                 payload = await self._queue.get()
                 message_id = int(payload)
                 message_row = await self.read_conn.fetchrow(
-                    SELECT_MESSAGE_QUERY.format(self.table_name), message_id
+                    SELECT_MESSAGE_QUERY.format(self.schema_name, self.table_name),
+                    message_id,
                 )
                 if message_row is None:
                     logger.warning(
@@ -221,7 +231,9 @@ class AsyncpgBroker(AsyncBroker):
 
                     async with self.write_pool.acquire() as conn:
                         _ = await conn.execute(
-                            DELETE_MESSAGE_QUERY.format(self.table_name),
+                            DELETE_MESSAGE_QUERY.format(
+                                self.schema_name, self.table_name
+                            ),
                             _message_id,
                         )
 
