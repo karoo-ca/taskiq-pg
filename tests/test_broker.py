@@ -108,7 +108,9 @@ async def test_listen(asyncpg_broker: AsyncpgBroker) -> None:
     task_name = "test_task"
     labels = {"label1": "label_val"}
     message_id = await conn.fetchval(
-        INSERT_MESSAGE_QUERY.format(asyncpg_broker.table_name),
+        INSERT_MESSAGE_QUERY.format(
+            asyncpg_broker.schema_name, asyncpg_broker.table_name
+        ),
         task_id,
         task_name,
         message_content.decode(),
@@ -132,7 +134,9 @@ async def test_wrong_format(asyncpg_broker: AsyncpgBroker) -> None:
     # Insert a message with missing task_id and task_name
     conn = await asyncpg.connect(dsn=asyncpg_broker.dsn)
     message_id = await conn.fetchval(
-        INSERT_MESSAGE_QUERY.format(asyncpg_broker.table_name),
+        INSERT_MESSAGE_QUERY.format(
+            asyncpg_broker.schema_name, asyncpg_broker.table_name
+        ),
         "",  # Missing task_id
         "",  # Missing task_name
         "wrong",  # Message content
@@ -176,3 +180,26 @@ async def test_delayed_message(asyncpg_broker: AsyncpgBroker) -> None:
 
     # Acknowledge the message
     await maybe_awaitable(message.ack())
+
+
+@pytest.mark.anyio
+async def test_custom_schema(
+    postgresql_dsn: str,
+    postgres_table: str,
+) -> None:
+    schema_name = "custom_schema"
+    broker = AsyncpgBroker(
+        dsn=postgresql_dsn,
+        channel_name=f"{postgres_table}_channel",
+        table_name=postgres_table,
+        schema_name=schema_name,
+    )
+    await broker.startup()
+    assert broker.write_pool
+    await broker.write_pool.execute(
+        f"DROP TABLE {schema_name}.{postgres_table}",
+    )
+    await broker.write_pool.execute(
+        f"DROP SCHEMA {schema_name}",
+    )
+    await broker.shutdown()
