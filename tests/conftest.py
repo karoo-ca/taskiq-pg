@@ -1,7 +1,7 @@
 import os
 import random
 import string
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 
@@ -75,10 +75,15 @@ async def asyncpg_broker(
 
     Initializes the broker with test parameters.
     """
+    # Use a random lock keyspace to avoid conflicts in parallel tests
+    job_lock_keyspace = random.randint(1000, 9999)
+
     broker = AsyncpgBroker(
         dsn=postgresql_dsn,
         channel_name=f"{postgres_table}_channel",
         table_name=postgres_table,
+        job_lock_keyspace=job_lock_keyspace,
+        enable_sweeping=False,  # Disable sweeping in tests to avoid conflicts
     )
     await broker.startup()
     yield broker
