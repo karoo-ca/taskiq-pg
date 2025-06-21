@@ -139,6 +139,43 @@ select convert_from(result, 'UTF8') from taskiq_results;
 - `max_retry_attempts`: Maximum number of message processing attempts.
 - `connection_kwargs`: Additional arguments for asyncpg connection.
 - `pool_kwargs`: Additional arguments for asyncpg pool creation.
+- `job_lock_keyspace`: Advisory lock keyspace for jobs (default: 1).
+- `message_ttl`: Time to live for completed messages in seconds (default: 86400).
+- `stuck_message_timeout`: Time before message is considered stuck in seconds (default: 300).
+- `enable_sweeping`: Enable automatic cleanup of stuck messages (default: True).
+- `sweep_interval`: Interval between sweep operations in seconds (default: 60).
+
+## Enhanced Features
+
+### Advisory Locking
+The broker now uses PostgreSQL advisory locks to prevent duplicate message processing. Each message gets a unique lock that is held while the message is being processed and released when acknowledged.
+
+### Message States
+Messages now have three states:
+- `queued`: Message is waiting to be processed
+- `active`: Message is currently being processed
+- `completed`: Message has been processed and acknowledged
+
+### Group-based Coordination
+You can prevent concurrent execution of related tasks by setting a `group_key` in the message labels:
+
+```python
+await my_task.kicker().with_labels(group_key="user_123").kiq()
+```
+
+### Message TTL
+Control how long completed messages are retained:
+
+```python
+# Keep completed message for 1 hour
+await my_task.kicker().with_labels(ttl=3600).kiq()
+```
+
+### Automatic Cleanup
+The broker automatically:
+- Sweeps stuck messages (messages without active locks) back to the queue
+- Cleans up expired completed messages
+- Handles connection failures with automatic reconnection
 
 ## Acknowledgements
 
