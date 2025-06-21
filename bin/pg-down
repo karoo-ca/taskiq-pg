@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -e
+
+echo "Cleaning up..."
+docker stop taskiq-postgres 2>/dev/null || true
+docker rm -v taskiq-postgres 2>/dev/null || true

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -e
+
+uv run mypy .
+
+cleanup() {
+	echo "Cleaning up..."
+	docker stop taskiq-postgres 2>/dev/null || true
+	docker rm -v taskiq-postgres 2>/dev/null || true
+}
+
+trap cleanup EXIT
+
+docker run -d --name taskiq-postgres -p 25432:5432 -e POSTGRES_PASSWORD=postgres postgres:16
+
+echo "Waiting for PostgreSQL to be ready..."
+until docker exec --env PGPASSWORD=postgres taskiq-postgres pg_isready >/dev/null 2>&1; do
+	echo "PostgreSQL is not ready yet, waiting..."
+	sleep 1
+done
+echo "PostgreSQL is ready!"
+
+POSTGRESQL_URL="postgresql://postgres:postgres@localhost:25432/postgres" uv run pytest
