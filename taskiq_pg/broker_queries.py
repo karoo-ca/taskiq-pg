@@ -1,5 +1,9 @@
+CREATE_SCHEMA_QUERY = """
+CREATE SCHEMA IF NOT EXISTS {};
+"""
+
 CREATE_TABLE_QUERY = """
-CREATE TABLE IF NOT EXISTS {} (
+CREATE TABLE IF NOT EXISTS {}.{} (
     id SERIAL PRIMARY KEY,
     task_id VARCHAR NOT NULL,
     task_name VARCHAR NOT NULL,
@@ -10,11 +14,11 @@ CREATE TABLE IF NOT EXISTS {} (
 """
 
 INSERT_MESSAGE_QUERY = """
-INSERT INTO {} (task_id, task_name, message, labels)
+INSERT INTO {}.{} (task_id, task_name, message, labels)
 VALUES ($1, $2, $3, $4)
 RETURNING id
 """
 
-SELECT_MESSAGE_QUERY = "SELECT * FROM {} WHERE id = $1"
+SELECT_MESSAGE_QUERY = "SELECT * FROM {}.{} WHERE id = $1"
 
-DELETE_MESSAGE_QUERY = "DELETE FROM {} WHERE id = $1"
+DELETE_MESSAGE_QUERY = "DELETE FROM {}.{} WHERE id = $1"

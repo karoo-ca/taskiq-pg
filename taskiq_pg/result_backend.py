@@ -19,6 +19,7 @@ from typing_extensions import override
 from taskiq_pg.exceptions import ResultIsMissingError
 from taskiq_pg.queries import (
     CREATE_INDEX_QUERY,
+    CREATE_SCHEMA_QUERY,
     CREATE_TABLE_QUERY,
     DELETE_RESULT_QUERY,
     INSERT_RESULT_QUERY,
@@ -27,6 +28,8 @@ from taskiq_pg.queries import (
 )
 
 _ReturnType = TypeVar("_ReturnType")
+
+DEFAULT_SCHEMA = "public"
 
 
 class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
@@ -39,6 +42,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             Callable[[], str],
         ] = "postgres://postgres:postgres@localhost:5432/postgres",
         keep_results: bool = True,
+        schema_name: str = DEFAULT_SCHEMA,
         table_name: str = "taskiq_results",
         field_for_task_id: Literal["VarChar", "Text"] = "VarChar",
         serializer: Optional[TaskiqSerializer] = None,
@@ -58,6 +62,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             Callable[[], str],
         ] = dsn
         self.keep_results: Final = keep_results
+        self.schema_name: Final = schema_name
         self.table_name: Final = table_name
         self.field_for_task_id: Final = field_for_task_id
         self.connect_kwargs: Final = connect_kwargs
@@ -89,8 +94,14 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             raise RuntimeError(msg)
         self._database_pool = _database_pool
 
+        if self.schema_name != DEFAULT_SCHEMA:
+            _ = await self._database_pool.execute(
+                CREATE_SCHEMA_QUERY.format(self.schema_name)
+            )
+
         _ = await self._database_pool.execute(
             CREATE_TABLE_QUERY.format(
+                self.schema_name,
                 self.table_name,
                 self.field_for_task_id,
             ),
@@ -98,6 +109,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         _ = await self._database_pool.execute(
             CREATE_INDEX_QUERY.format(
                 self.table_name,
+                self.schema_name,
                 self.table_name,
             ),
         )
@@ -120,6 +132,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         """
         _ = await self._database_pool.execute(
             INSERT_RESULT_QUERY.format(
+                self.schema_name,
                 self.table_name,
             ),
             task_id,
@@ -137,6 +150,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             bool,
             await self._database_pool.fetchval(
                 IS_RESULT_EXISTS_QUERY.format(
+                    self.schema_name,
                     self.table_name,
                 ),
                 task_id,
@@ -161,6 +175,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
             bytes,
             await self._database_pool.fetchval(
                 SELECT_RESULT_QUERY.format(
+                    self.schema_name,
                     self.table_name,
                 ),
                 task_id,
@@ -173,6 +188,7 @@ class AsyncpgResultBackend(AsyncResultBackend[_ReturnType]):
         if not self.keep_results:
             _ = await self._database_pool.execute(
                 DELETE_RESULT_QUERY.format(
+                    self.schema_name,
                     self.table_name,
                 ),
                 task_id,

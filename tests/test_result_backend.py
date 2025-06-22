@@ -195,3 +195,24 @@ async def test_test_success_backend_custom_result_set_same_task_id(
     result = await asyncpg_result_backend.get_result(task_id=task_id)
 
     assert result.return_value["test_arg"] == another_taskiq_res_uuid  # type: ignore
+
+
+@pytest.mark.anyio
+async def test_custom_schema(
+    postgresql_dsn: str,
+    postgres_table: str,
+) -> None:
+    schema_name = "custom_schema"
+    backend: AsyncpgResultBackend[object] = AsyncpgResultBackend(
+        dsn=postgresql_dsn,
+        schema_name=schema_name,
+        table_name=postgres_table,
+    )
+    await backend.startup()
+    await backend._database_pool.execute(
+        f"DROP TABLE {schema_name}.{postgres_table}",
+    )
+    await backend._database_pool.execute(
+        f"DROP SCHEMA {schema_name}",
+    )
+    await backend.shutdown()
