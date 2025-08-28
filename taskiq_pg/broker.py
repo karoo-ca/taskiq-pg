@@ -1,26 +1,34 @@
+"""Asyncpg broker implementation using asyncpg and PostgreSQL LISTEN/NOTIFY."""
+
 import asyncio
 import contextlib
 import json
 import logging
 from collections.abc import AsyncGenerator
-from typing import (
-    Any,
-    Callable,
-    Optional,
-    TypeVar,
-    Union,
-)
+from typing import Any, Callable, Optional, TypeVar, Union, Mapping, Sequence
 
 import asyncpg
-from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
+from taskiq import (
+    AckableMessage,
+    AsyncBroker,
+    AsyncResultBackend,
+    BrokerMessage,
+)
 from typing_extensions import override
 
 from taskiq_pg.broker_queries import (
     CLEANUP_EXPIRED_QUERY,
     COMPLETE_MESSAGE_QUERY,
-    CREATE_TABLE_QUERY,
+    CREATE_UPDATE_TABLE_QUERY,
     DEQUEUE_MESSAGE_QUERY,
     SWEEP_MESSAGES_QUERY,
+    NOTIFY_EXISTING_MESSAGES_QUERY,
+    INSERT_MESSAGE_QUERY,
+    RELEASE_ALL_ADVISORY_LOCKS_QUERY,
+    NOTIFY_QUERY,
+    ACQUIRE_ADVISORY_LOCK_QUERY,
+    RELEASE_ADVISORY_LOCK_QUERY,
+    UPDATE_MESSAGE_STATUS_QUERY,
 )
 
 _T = TypeVar("_T")
@@ -33,7 +41,8 @@ class AsyncpgBroker(AsyncBroker):
     def __init__(
         self,
         dsn: Union[
-            str, Callable[[], str]
+            str,
+            Callable[[], str],
         ] = "postgresql://postgres:postgres@localhost:5432/postgres",
         result_backend: Optional[AsyncResultBackend[_T]] = None,
         task_id_generator: Optional[Callable[[], str]] = None,
@@ -123,16 +132,20 @@ class AsyncpgBroker(AsyncBroker):
         async with self.write_pool.acquire() as conn:
             # Format the CREATE_TABLE_QUERY with proper table names for indexes
             table_name_safe = self.table_name.replace('"', "").replace(" ", "_")
-            create_query = CREATE_TABLE_QUERY.format(
-                self.table_name,  # table name
-                table_name_safe,  # index 1 name
-                self.table_name,  # index 1 table
-                table_name_safe,  # index 2 name
-                self.table_name,  # index 2 table
-                table_name_safe,  # index 3 name
-                self.table_name,  # index 3 table
+            create_query = CREATE_UPDATE_TABLE_QUERY.safe_substitute(
+                table_name=self.table_name,
+                table_name_safe=table_name_safe,
             )
+
             _ = await conn.execute(create_query)
+
+            # PRIME THE PUMP: Notify all existing queued messages
+            notify_query = NOTIFY_EXISTING_MESSAGES_QUERY.safe_substitute(
+                table_name=self.table_name,
+                channel_name=self.channel_name,
+            )
+
+            _ = await conn.execute(notify_query)
 
         await self.read_conn.add_listener(self.channel_name, self._notification_handler)
         self._queue = asyncio.Queue()
@@ -155,7 +168,7 @@ class AsyncpgBroker(AsyncBroker):
         # Release all advisory locks before closing connections
         if self.dequeue_conn is not None:
             try:
-                _ = await self.dequeue_conn.execute("SELECT pg_advisory_unlock_all()")
+                _ = await self.dequeue_conn.execute(RELEASE_ALL_ADVISORY_LOCKS_QUERY)
             except Exception as e:
                 logger.warning(f"Failed to release advisory locks: {e}")
 
@@ -187,7 +200,28 @@ class AsyncpgBroker(AsyncBroker):
             **payload**: the payload.
         """
         logger.debug(f"Received notification on channel {channel}: {payload}")
-        if self._queue is not None:
+        if self._queue is None:
+            logger.error("Notification received but queue is not initialized")
+            return
+
+        try:
+            # Try to parse the payload as a JSON batch first
+            data = json.loads(str(payload))
+            if (
+                isinstance(data, Mapping)
+                and "ids" in data
+                and isinstance(data["ids"], Sequence)
+            ):
+                for message_id in data["ids"]:
+                    self._queue.put_nowait(str(message_id))
+                logger.info(
+                    f"Queued {len(data['ids'])} messages from batch notification.",
+                )
+            else:
+                # Fallback for single ID payload
+                self._queue.put_nowait(str(payload))
+        except (json.JSONDecodeError, TypeError):
+            # If it's not JSON, treat it as a single ID (legacy format)
             self._queue.put_nowait(str(payload))
 
     @override
@@ -224,26 +258,17 @@ class AsyncpgBroker(AsyncBroker):
 
             # Insert the message into the database
             result = await conn.fetchrow(
-                f"""
-                INSERT INTO {self.table_name} (
-                    task_id,
-                    task_name,
-                    message,
-                    labels,
-                    group_key,
-                    expire_at,
-                    scheduled_at
-                )
-                VALUES ($1, $2, $3, $4, $5, {expire_at_query}, {scheduled_at_query})
-                RETURNING id, lock_key
-                """,
-                message.task_id,
-                message.task_name,
-                message.message.decode(),
-                json.dumps(message.labels),
-                group_key,
+                INSERT_MESSAGE_QUERY.safe_substitute(
+                    table_name=self.table_name,
+                    task_id=message.task_id,
+                    task_name=message.task_name,
+                    message=message.message.decode(),
+                    labels=json.dumps(message.labels),
+                    group_key=group_key,
+                    expire_at=expire_at_query,
+                    scheduled_at=scheduled_at_query,
+                ),
             )
-
             if result is None:
                 raise RuntimeError("Failed to insert message")
 
@@ -252,7 +277,9 @@ class AsyncpgBroker(AsyncBroker):
 
             # Always send a NOTIFY - the dequeue logic will check scheduled_at
             _ = await conn.execute(
-                f"NOTIFY {self.channel_name}, '{message_inserted_id}'"
+                NOTIFY_QUERY.safe_substitute(
+                    channel_name=self.channel_name, payload=message_inserted_id,
+                ),
             )
 
     async def _schedule_notification(self, message_id: int, delay_seconds: int) -> None:
@@ -262,7 +289,11 @@ class AsyncpgBroker(AsyncBroker):
             return
         async with self.write_pool.acquire() as conn:
             # Send NOTIFY
-            _ = await conn.execute(f"NOTIFY {self.channel_name}, '{message_id}'")
+            _ = await conn.execute(
+                NOTIFY_QUERY.safe_substitute(
+                    channel_name=self.channel_name, payload=message_id,
+                ),
+            )
 
     @override
     async def listen(self) -> AsyncGenerator[AckableMessage, None]:  # noqa: C901
@@ -317,19 +348,19 @@ class AsyncpgBroker(AsyncBroker):
                     async with self.write_pool.acquire() as conn:
                         # Mark message as completed with TTL
                         _ = await conn.execute(
-                            COMPLETE_MESSAGE_QUERY.format(self.table_name),
-                            self.message_ttl,
-                            _message_id,
+                            COMPLETE_MESSAGE_QUERY.safe_substitute(
+                                table_name=self.table_name,
+                                message_ttl=self.message_ttl,
+                                message_id=_message_id,
+                            ),
                         )
 
                         # Release the advisory lock
                         _ = await conn.execute(
-                            f"""
-                            SELECT pg_advisory_unlock(
-                                {self.job_lock_keyspace},
-                                {_lock_key}
-                            )
-                            """
+                            RELEASE_ADVISORY_LOCK_QUERY.safe_substitute(
+                                job_lock_keyspace=self.job_lock_keyspace,
+                                lock_key=_lock_key,
+                            ),
                         )
 
                 yield AckableMessage(data=message_data, ack=ack)
@@ -352,12 +383,8 @@ class AsyncpgBroker(AsyncBroker):
                 await self._ensure_connection_healthy()
 
                 # Format the dequeue query
-                dequeue_query = DEQUEUE_MESSAGE_QUERY.format(
-                    self.table_name,
-                    self.table_name,
-                    self.table_name,
-                    self.table_name,
-                    self.table_name,
+                dequeue_query = DEQUEUE_MESSAGE_QUERY.safe_substitute(
+                    table_name=self.table_name,
                 )
 
                 # Execute dequeue with advisory lock acquisition
@@ -370,24 +397,23 @@ class AsyncpgBroker(AsyncBroker):
 
                     # Try to acquire advisory lock
                     lock_acquired = await self.dequeue_conn.fetchval(
-                        f"""
-                        SELECT pg_try_advisory_lock(
-                            {self.job_lock_keyspace},
-                            {message_row["lock_key"]}
-                        )
-                        """
+                        ACQUIRE_ADVISORY_LOCK_QUERY.safe_substitute(
+                            job_lock_keyspace=self.job_lock_keyspace,
+                            lock_key=message_row["lock_key"],
+                        ),
                     )
 
                     if not lock_acquired:
                         logger.warning(
-                            f"Could not acquire lock for message {message_row['id']}. This may indicate a race condition."  # noqa: E501
+                            f"Could not acquire lock for message {message_row['id']}. This may indicate a race condition.",  # noqa: E501
                         )
                         # Reset message status back to queued
                         _ = await self.dequeue_conn.execute(
-                            f"""
-                            UPDATE {self.table_name} SET status = 'queued' WHERE id = $1
-                            """,  # noqa: S608
-                            message_row["id"],
+                            UPDATE_MESSAGE_STATUS_QUERY.safe_substitute(
+                                table_name=self.table_name,
+                                message_status="queued",
+                                message_id=message_row["id"],
+                            ),
                         )
                         return None
 
@@ -439,21 +465,25 @@ class AsyncpgBroker(AsyncBroker):
 
         try:
             async with self.write_pool.acquire() as conn:
-                sweep_query = SWEEP_MESSAGES_QUERY.format(
-                    self.table_name,
-                    self.table_name,
-                    self.table_name,
-                    self.table_name,
+                sweep_query = SWEEP_MESSAGES_QUERY.safe_substitute(
+                    table_name=self.table_name,
                 )
 
-                swept_ids = await conn.fetch(
+                requeued = await conn.fetch(
                     sweep_query,
                     self.job_lock_keyspace,
                     self.stuck_message_timeout,
                 )
 
-                if swept_ids:
-                    logger.info(f"Swept {len(swept_ids)} stuck messages back to queue")
+                if requeued and requeued["requeued_ids"]:
+                    requeued_ids = requeued["requeued_ids"]
+                    logger.info(f"Re-queued {len(requeued_ids)} stuck messages.")
+                    # Send a notification for the newly requeued tasks.
+                    payload = json.dumps({"ids": requeued_ids})
+                    notify_query = NOTIFY_QUERY.safe_substitute(
+                        channel_name=self.channel_name, payload=payload,
+                    )
+                    await conn.execute(notify_query)
 
         except Exception as e:
             logger.error(f"Error sweeping stuck messages: {e}")
@@ -465,8 +495,8 @@ class AsyncpgBroker(AsyncBroker):
 
         try:
             async with self.write_pool.acquire() as conn:
-                cleanup_query = CLEANUP_EXPIRED_QUERY.format(
-                    self.table_name, self.table_name
+                cleanup_query = CLEANUP_EXPIRED_QUERY.safe_substitute(
+                    table_name=self.table_name,
                 )
 
                 result = await conn.execute(cleanup_query)
