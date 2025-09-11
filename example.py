@@ -43,7 +43,7 @@ Save reference to fc238b66b9554315b5ca3d16bcab5a8d so you can look at result lat
 ```sh
 $ bin/pg-down
 ```
-"""  # noqa: E501
+"""
 
 import asyncio
 import os
