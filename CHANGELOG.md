@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* Add PostgreSQL advisory locking for preventing duplicate message processing
+* Add message states (queued, active, completed) for better tracking
+* Add group-based job coordination to prevent concurrent execution of related tasks
+* Add message TTL support for automatic cleanup of completed messages
+* Add automatic sweeping of stuck messages back to queue
+* Add connection health checks and automatic reconnection
+* Add dedicated dequeue connection for improved performance
+* Implement `FOR UPDATE SKIP LOCKED` for efficient concurrent dequeuing
+* Add configurable sweep interval and stuck message timeout
+
+### Performance Improvements
+
+* Use optimized indexes for efficient dequeuing operations
+* Implement connection pooling best practices
+* Add batch operations for cleanup tasks
+
 ## [0.2.0](https://github.com/karoo-ca/taskiq-pg/compare/v0.1.7...v0.2.0) (2025-03-06)
 
 
