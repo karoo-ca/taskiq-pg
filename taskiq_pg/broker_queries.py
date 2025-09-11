@@ -1,11 +1,34 @@
 """Queries for managing task messages."""
 
-# Import StrEnum
+from __future__ import annotations
 
-from enum import StrEnum
+import sys
+from enum import Enum
+
+# Polyfill StrEnum for Python <=3.10
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from typing_extensions import Self
+
+    class StrEnum(str, Enum):
+        """String enumeration for Python <=3.10."""
+
+        def __new__(cls, value: str) -> Self:  # noqa: D102
+            member = str.__new__(cls, value)
+            member._value_ = value
+            return member
+
+        def __str__(self) -> str:
+            return self.value
+
+        def __repr__(self) -> str:
+            return f"{self.__class__.__name__}.{self.name}"
 
 
 class MessageStatus(StrEnum):
+    """States a broker message can be in."""
+
     QUEUED = "queued"
     ACTIVE = "active"
     COMPLETED = "completed"

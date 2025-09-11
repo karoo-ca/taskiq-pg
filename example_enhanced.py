@@ -36,7 +36,7 @@ Note: Tasks 1 and 2 have the same group_key, so they execute sequentially, not c
 ```sh
 $ bin/pg-down
 ```
-"""  # noqa: E501
+"""
 
 import asyncio
 import os

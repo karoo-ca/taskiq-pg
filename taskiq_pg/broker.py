@@ -6,26 +6,27 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
-from typing import Any, Callable, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
-from taskiq import (AckableMessage, AsyncBroker, AsyncResultBackend,
-                    BrokerMessage)
+from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
 from typing_extensions import override
 
-from taskiq_pg.broker_queries import (ACQUIRE_ADVISORY_LOCK_QUERY,
-                                      CLEANUP_EXPIRED_QUERY,
-                                      COMPLETE_MESSAGE_QUERY,
-                                      CREATE_UPDATE_TABLE_QUERY,
-                                      DEQUEUE_MESSAGE_QUERY,
-                                      INSERT_MESSAGE_QUERY,
-                                      NOTIFY_EXISTING_MESSAGES_QUERY,
-                                      NOTIFY_QUERY,
-                                      RELEASE_ADVISORY_LOCK_QUERY,
-                                      RELEASE_ALL_ADVISORY_LOCKS_QUERY,
-                                      SWEEP_MESSAGES_QUERY,
-                                      UPDATE_MESSAGE_STATUS_QUERY,
-                                      MessageStatus)
+from taskiq_pg.broker_queries import (
+    ACQUIRE_ADVISORY_LOCK_QUERY,
+    CLEANUP_EXPIRED_QUERY,
+    COMPLETE_MESSAGE_QUERY,
+    CREATE_UPDATE_TABLE_QUERY,
+    DEQUEUE_MESSAGE_QUERY,
+    INSERT_MESSAGE_QUERY,
+    NOTIFY_EXISTING_MESSAGES_QUERY,
+    NOTIFY_QUERY,
+    RELEASE_ADVISORY_LOCK_QUERY,
+    RELEASE_ALL_ADVISORY_LOCKS_QUERY,
+    SWEEP_MESSAGES_QUERY,
+    UPDATE_MESSAGE_STATUS_QUERY,
+    MessageStatus,
+)
 
 _T = TypeVar("_T")
 logger = logging.getLogger("taskiq.asyncpg_broker")
@@ -250,6 +251,7 @@ class AsyncpgBroker(AsyncBroker):
             delay_value = message.labels.get("delay")
 
             # Calculate expire_at based on TTL
+            expire_at_query: Union[datetime, Literal["NULL"]]
             if ttl and isinstance(ttl, (int, float)) and ttl > 0:
                 # Use PostgreSQL interval for expire_at
                 expire_at_query = datetime.now() + timedelta(seconds=int(ttl))
@@ -399,7 +401,7 @@ class AsyncpgBroker(AsyncBroker):
 
                     if not lock_acquired:
                         logger.warning(
-                            f"Could not acquire lock for message {message_row['id']}. This may indicate a race condition.",  # noqa: E501
+                            f"Could not acquire lock for message {message_row['id']}. This may indicate a race condition.",
                         )
                         # Reset message status back to queued
                         _ = await self.dequeue_conn.execute(

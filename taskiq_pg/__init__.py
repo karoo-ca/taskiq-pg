@@ -1,4 +1,4 @@
-"""Taskiq PostgreSQL Broker and Result Backend"""
+"""Taskiq PostgreSQL Broker and Result Backend."""
 
 from taskiq_pg.broker import AsyncpgBroker
 from taskiq_pg.result_backend import AsyncpgResultBackend
