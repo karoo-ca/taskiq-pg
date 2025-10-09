@@ -162,3 +162,5 @@ cython_debug/
 
 # ruff
 .ruff_cache
+
+.claude
