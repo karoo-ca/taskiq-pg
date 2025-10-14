@@ -65,10 +65,18 @@ DECLARE
     payload json;
     ids integer[];
 BEGIN
-    -- Select all IDs that are ready to be processed.
+    -- Select all IDs that are ready to be processed, with a limit
+    -- to keep the payload size under 8000 bytes for pg_notify.
+    -- https://www.postgresql.org/docs/current/sql-notify.html
+    -- id is of type serial, i.e. 4 bytes so 1500 ids should be safe.
     SELECT array_agg(id) INTO ids
-    FROM {table_name}
-    WHERE status = '{queued_status}' AND scheduled_at <= NOW();
+    FROM (
+        SELECT id
+        FROM {table_name}
+        WHERE status = '{queued_status}' AND scheduled_at <= NOW()
+        ORDER BY scheduled_at, id
+        LIMIT 1500
+    ) AS sub;
 
     -- Only send a notification if there are tasks to process.
     IF array_length(ids, 1) > 0 THEN
