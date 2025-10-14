@@ -58,6 +58,9 @@ pretty = true
 show_error_codes = true
 exclude = ["examples"]
 
+[tool.pyright]
+pythonVersion = "3.9"
+
 [tool.ruff]
 line-length = 88
 
@@ -103,6 +106,7 @@ ignore = [
   "D106",    # Missing docstring in public nested class
   "COM812",  # Missing trailing comma (formatter handles)
   "ISC001",  # Single line implicit string concatenation (formatter handles)
+  "E501",    # Line too long (managed by ruff format)
 ]
 exclude = [".venv/"]
 mccabe = { max-complexity = 10 }
