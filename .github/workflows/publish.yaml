@@ -29,7 +29,7 @@ jobs:
           python-version-file: pyproject.toml
       - run: uv build
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: wheels-sdist
           path: dist
@@ -41,7 +41,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
