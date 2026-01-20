@@ -58,6 +58,9 @@ pretty = true
 show_error_codes = true
 exclude = ["examples"]
 
+[tool.pyright]
+pythonVersion = "3.9"
+
 [tool.ruff]
 line-length = 88
 
