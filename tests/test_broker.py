@@ -60,6 +60,63 @@ async def test_kick_success(asyncpg_broker: AsyncpgBroker) -> None:
 
 
 @pytest.mark.anyio
+async def test_startup_with_many_existing_messages(
+    asyncpg_broker: AsyncpgBroker,
+) -> None:
+    """Broker starts and drains a backlog larger than the priming NOTIFY batch.
+
+    Inserts a few thousand queued messages *before* (re)starting the broker so
+    that startup runs ``NOTIFY_EXISTING_MESSAGES_QUERY``. This verifies that:
+
+    * the priming NOTIFY payload stays under the pg_notify 8000-byte limit
+      (it would raise during startup otherwise), and
+    * every message is eventually processed even though the priming batch is
+      capped well below the total backlog (``listen()`` also polls the DB).
+    """
+    total = 2500
+
+    # Bulk-insert queued messages directly into the table. status defaults to
+    # 'queued' and scheduled_at to NOW(), so they are immediately processable.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    await conn.execute(
+        f"""
+        INSERT INTO {asyncpg_broker.table_name} (task_id, task_name, message, labels)
+        SELECT 'bulk_' || g, 'bulk_task', 'msg_' || g, '{{}}'::jsonb
+        FROM generate_series(1, $1) AS g
+        """,  # noqa: S608
+        total,
+    )
+    await conn.close()
+
+    # Restart the broker so startup primes the queue from the existing backlog.
+    await asyncpg_broker.shutdown()
+    await asyncpg_broker.startup()
+
+    # Drain the full backlog, acknowledging each message.
+    received = 0
+
+    async def drain() -> None:
+        nonlocal received
+        async for message in asyncpg_broker.listen():
+            await maybe_awaitable(message.ack())
+            received += 1
+            if received >= total:
+                break
+
+    await asyncio.wait_for(drain(), timeout=120.0)
+
+    assert received == total
+
+    # No queued messages should remain.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    remaining = await conn.fetchval(
+        f"SELECT COUNT(*) FROM {asyncpg_broker.table_name} WHERE status = 'queued'",  # noqa: S608
+    )
+    await conn.close()
+    assert remaining == 0
+
+
+@pytest.mark.anyio
 async def test_startup(asyncpg_broker: AsyncpgBroker) -> None:
     """
     Test the startup process of the broker.

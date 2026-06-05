@@ -68,14 +68,17 @@ BEGIN
     -- Select all IDs that are ready to be processed, with a limit
     -- to keep the payload size under 8000 bytes for pg_notify.
     -- https://www.postgresql.org/docs/current/sql-notify.html
-    -- id is of type serial, i.e. 4 bytes so 1500 ids should be safe.
+    -- Sized for a future-proof bigserial worst case: 19 digits per id,
+    -- and the JSON {{"ids": [...]}} payload uses 20*n + 9 bytes for n ids.
+    -- With a 20% safety buffer the budget is 8000 * 0.8 = 6400 bytes,
+    -- so 20*n + 9 <= 6400 gives n <= 319.
     SELECT array_agg(id) INTO ids
     FROM (
         SELECT id
         FROM {table_name}
         WHERE status = '{queued_status}' AND scheduled_at <= NOW()
         ORDER BY scheduled_at, id
-        LIMIT 1500
+        LIMIT 319
     ) AS sub;
 
     -- Only send a notification if there are tasks to process.
