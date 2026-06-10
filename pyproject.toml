@@ -56,7 +56,7 @@ dev = [
 strict = true
 pretty = true
 show_error_codes = true
-exclude = ["examples"]
+exclude = ["examples", "bench"]
 
 [tool.ruff]
 line-length = 88
@@ -115,6 +115,13 @@ mccabe = { max-complexity = 10 }
   "SLF001", # Private member accessed
   "S311",   # Standard pseudo-random generators are not suitable for security/cryptographic purposes
   "D101",   # Missing docstring in public class
+]
+"bench/*" = [
+  "T201",   # print is the benchmark's output
+  "S608",   # SQL built from controlled table/channel names
+  "S311",   # Standard pseudo-random generators are not suitable for security/cryptographic purposes
+  "SLF001", # Private member accessed
+  "D103",   # Missing docstring in public function
 ]
 
 [tool.ruff.lint.pydocstyle]
