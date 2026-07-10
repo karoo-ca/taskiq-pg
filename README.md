@@ -140,6 +140,30 @@ select convert_from(result, 'UTF8') from taskiq_results;
 - `connection_kwargs`: Additional arguments for asyncpg connection.
 - `pool_kwargs`: Additional arguments for asyncpg pool creation.
 
+## Benchmarking
+
+`bench/throughput.py` is a standalone end-to-end throughput test. It spawns a real
+`taskiq worker`, enqueues N tasks, and times the drain. The task is a 50/50 mix of
+CPU busy-loop and `asyncio.sleep`, so the worker is the bottleneck.
+
+```sh
+bin/pg-up
+export POSTGRESQL_URL="postgresql://postgres:postgres@localhost:25432/postgres"
+
+# 5000 tasks, 1 worker, up to 100 concurrent async tasks
+uv run python -m bench.throughput -n 5000 -w 1 -m 100
+# tune per-task cost (seconds): uv run python -m bench.throughput --busy-seconds 0.002 --sleep-seconds 0.01
+
+bin/pg-down
+```
+
+```text
+end-to-end : 15.363s (325.5 tasks/s)
+```
+
+Note: the broker has no per-message lock, so with `-w > 1` every worker runs every
+task — use `-w 1` for a clean number. See `--help` and the module docstring for more.
+
 ## Acknowledgements
 
 Builds on work from [pgmq](https://github.com/oliverlambson/pgmq).
