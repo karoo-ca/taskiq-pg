@@ -135,7 +135,9 @@ async def _wait_ready(timeout: float) -> bool:
         f"SELECT id FROM {TABLE} ORDER BY id DESC LIMIT 1"
     )
     if sentinel_id is None:
-        return False
+        # The sentinel was processed before we could read its id; if the table
+        # has drained the worker is functioning, so treat this as success.
+        return await _count_rows() == 0
 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
