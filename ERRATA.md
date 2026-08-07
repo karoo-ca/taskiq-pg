@@ -20,22 +20,10 @@ runtime. Make tasks idempotent.
 Fix: use a `locked_at` claim timestamp (set on dequeue, sweep on
 `status='active' AND locked_at < NOW() - timeout`); drop the `pg_locks` join.
 
-## 2. TTL strands queued messages; `ttl<=0` crashes
+## 2. Delays use naive local time
 
-`expire_at` is set at *insert*, and dequeue skips `expire_at <= NOW()`. A message
-sitting queued past its TTL (default 24h) becomes un-dequeuable and is never
-cleaned (cleanup only touches `completed`) — a poison row. A `ttl<=0` label binds
-the string `"NULL"` to a `timestamptz` column → asyncpg `DataError` on `kick`.
-
-Workaround: keep `message_ttl` > max queue wait; don't pass `ttl<=0`.
-
-Fix: set `expire_at` on completion only; bind `None`, never `"NULL"`.
-
-## 3. Delays/TTLs use naive local time
-
-`kick` uses naive `datetime.now()` for the `timestamptz` `scheduled_at` /
-`expire_at`. asyncpg treats naive datetimes as UTC, so off-UTC hosts skew
-delays/TTLs by the local offset.
+`kick` uses naive `datetime.now()` for the `timestamptz` `scheduled_at`. asyncpg
+treats naive datetimes as UTC, so off-UTC hosts skew delays by the local offset.
 
 Workaround: run brokers in UTC.
 

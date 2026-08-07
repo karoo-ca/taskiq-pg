@@ -236,16 +236,12 @@ class AsyncpgBroker(AsyncBroker):
             raise ValueError("Please run startup before kicking.")
 
         async with self.write_pool.acquire() as conn:
-            # Extract group_key, ttl, and delay from labels if present
+            # Extract group_key and delay from labels if present.
+            # TTL is retention for completed messages and is applied on ack,
+            # not at enqueue time, so expire_at is left NULL here.
             group_key = message.labels.get("group_key")
-            ttl = message.labels.get("ttl", self.message_ttl)
             delay_value = message.labels.get("delay")
-
-            # Calculate expire_at based on TTL
             expire_at_query: Optional[datetime] = None
-            if ttl and isinstance(ttl, (int, float)) and ttl > 0:
-                # Use PostgreSQL interval for expire_at
-                expire_at_query = datetime.now() + timedelta(seconds=int(ttl))
 
             # Calculate scheduled_at based on delay
             if delay_value is not None:
@@ -319,8 +315,13 @@ class AsyncpgBroker(AsyncBroker):
                     msg = "message is not a string"
                     raise ValueError(msg)
                 message_data = message_str.encode()
+                # Retention TTL is per-message (label) or broker default,
+                # applied when the message is marked completed.
+                ttl = self._resolve_ttl(message_row.get("labels"))
 
-                async def ack(*, _message_id: int = message_id) -> None:
+                async def ack(
+                    *, _message_id: int = message_id, _ttl: int = ttl
+                ) -> None:
                     if self.write_pool is None:
                         raise ValueError("Call startup before starting listening.")
 
@@ -332,7 +333,7 @@ class AsyncpgBroker(AsyncBroker):
                                 completed_status=MessageStatus.COMPLETED,
                                 active_status=MessageStatus.ACTIVE,
                             ),
-                            self.message_ttl,
+                            _ttl,
                             _message_id,
                         )
 
@@ -340,6 +341,16 @@ class AsyncpgBroker(AsyncBroker):
             except Exception as e:
                 logger.exception(f"Error processing message: {e}")
                 continue
+
+    def _resolve_ttl(self, labels: object) -> int:
+        """Resolve completed-message retention TTL from labels, else default."""
+        if isinstance(labels, str):
+            labels = json.loads(labels)
+        if isinstance(labels, Mapping):
+            ttl = labels.get("ttl")
+            if isinstance(ttl, (int, float)) and ttl > 0:
+                return int(ttl)
+        return self.message_ttl
 
     async def _dequeue_message(self) -> Optional[asyncpg.Record]:
         """

@@ -322,6 +322,17 @@ async def test_message_ttl(asyncpg_broker: AsyncpgBroker) -> None:
 
     await asyncpg_broker.kick(sent)
 
+    # Retention TTL is not applied at enqueue time.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    queued_row = await conn.fetchrow(
+        f"SELECT status, expire_at FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+    assert queued_row is not None
+    assert queued_row["status"] == "queued"
+    assert queued_row["expire_at"] is None
+
     # Receive and acknowledge the message
     message = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
     await maybe_awaitable(message.ack())
@@ -364,3 +375,30 @@ async def test_non_positive_ttl_inserts_null_expire_at(
 
     assert row is not None
     assert row["expire_at"] is None
+
+
+@pytest.mark.anyio
+async def test_non_positive_ttl_uses_default_retention_on_ack(
+    asyncpg_broker: AsyncpgBroker,
+) -> None:
+    """Non-positive per-message TTL falls back to broker retention default on ack."""
+    sent = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task",
+        message=b"ttl_message",
+        labels={"ttl": 0},
+    )
+
+    await asyncpg_broker.kick(sent)
+    message = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
+    await maybe_awaitable(message.ack())
+
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    ttl_seconds = await conn.fetchval(
+        f"SELECT EXTRACT(EPOCH FROM (expire_at - NOW())) FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+
+    assert ttl_seconds is not None
+    assert 0 < ttl_seconds <= asyncpg_broker.message_ttl
