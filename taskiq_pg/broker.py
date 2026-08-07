@@ -265,7 +265,6 @@ class AsyncpgBroker(AsyncBroker):
                 raise RuntimeError("Failed to insert message")
 
             message_inserted_id = result["id"]
-            result["lock_key"]
 
             # Always send a NOTIFY - the dequeue logic will check scheduled_at
             _ = await conn.execute(
