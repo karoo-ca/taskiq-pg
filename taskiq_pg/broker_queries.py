@@ -176,17 +176,8 @@ WHERE id IN (
 )
 """
 
-RELEASE_ALL_ADVISORY_LOCKS_QUERY = """
-SELECT pg_advisory_unlock_all()
-"""
-
 NOTIFY_QUERY = """
 SELECT pg_notify($1, $2::text)
-"""
-
-
-RELEASE_ADVISORY_LOCK_QUERY = """
-SELECT pg_advisory_unlock($1, $2)
 """
 
 ACQUIRE_ADVISORY_LOCK_QUERY = "SELECT pg_try_advisory_xact_lock($1, $2)"

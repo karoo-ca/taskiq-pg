@@ -337,3 +337,30 @@ async def test_message_ttl(asyncpg_broker: AsyncpgBroker) -> None:
     assert row is not None
     assert row["status"] == "completed"
     assert row["expire_at"] is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("ttl", [0, -1])
+async def test_non_positive_ttl_inserts_null_expire_at(
+    asyncpg_broker: AsyncpgBroker,
+    ttl: int,
+) -> None:
+    """Non-positive TTL must bind SQL NULL, not the string 'NULL'."""
+    sent = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task",
+        message=b"ttl_message",
+        labels={"ttl": ttl},
+    )
+
+    await asyncpg_broker.kick(sent)
+
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    row = await conn.fetchrow(
+        f"SELECT expire_at FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+
+    assert row is not None
+    assert row["expire_at"] is None

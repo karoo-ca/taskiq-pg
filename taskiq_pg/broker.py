@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta
-from typing import Any, Callable, Literal, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, TypeVar, Union
 
 import asyncpg
 from taskiq import AckableMessage, AsyncBroker, AsyncResultBackend, BrokerMessage
@@ -21,8 +21,6 @@ from taskiq_pg.broker_queries import (
     INSERT_MESSAGE_QUERY,
     NOTIFY_EXISTING_MESSAGES_QUERY,
     NOTIFY_QUERY,
-    RELEASE_ADVISORY_LOCK_QUERY,
-    RELEASE_ALL_ADVISORY_LOCKS_QUERY,
     SWEEP_MESSAGES_QUERY,
     UPDATE_MESSAGE_STATUS_QUERY,
     MessageStatus,
@@ -173,13 +171,6 @@ class AsyncpgBroker(AsyncBroker):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._sweep_task
 
-        # Release all advisory locks before closing connections
-        if self.dequeue_conn is not None:
-            try:
-                _ = await self.dequeue_conn.execute(RELEASE_ALL_ADVISORY_LOCKS_QUERY)
-            except Exception as e:
-                logger.warning(f"Failed to release advisory locks: {e}")
-
         if self.read_conn is not None:
             await self.read_conn.close()
         if self.dequeue_conn is not None:
@@ -251,12 +242,10 @@ class AsyncpgBroker(AsyncBroker):
             delay_value = message.labels.get("delay")
 
             # Calculate expire_at based on TTL
-            expire_at_query: Union[datetime, Literal["NULL"]]
+            expire_at_query: Optional[datetime] = None
             if ttl and isinstance(ttl, (int, float)) and ttl > 0:
                 # Use PostgreSQL interval for expire_at
                 expire_at_query = datetime.now() + timedelta(seconds=int(ttl))
-            else:
-                expire_at_query = "NULL"
 
             # Calculate scheduled_at based on delay
             if delay_value is not None:
@@ -322,8 +311,6 @@ class AsyncpgBroker(AsyncBroker):
                     continue
 
                 message_id = message_row["id"]
-                lock_key = message_row["lock_key"]
-
                 if message_row.get("message") is None:
                     msg = "Message row does not have 'message' column"
                     raise ValueError(msg)
@@ -333,9 +320,7 @@ class AsyncpgBroker(AsyncBroker):
                     raise ValueError(msg)
                 message_data = message_str.encode()
 
-                async def ack(
-                    *, _message_id: int = message_id, _lock_key: int = lock_key
-                ) -> None:
+                async def ack(*, _message_id: int = message_id) -> None:
                     if self.write_pool is None:
                         raise ValueError("Call startup before starting listening.")
 
@@ -349,13 +334,6 @@ class AsyncpgBroker(AsyncBroker):
                             ),
                             self.message_ttl,
                             _message_id,
-                        )
-
-                        # Release the advisory lock
-                        _ = await conn.execute(
-                            RELEASE_ADVISORY_LOCK_QUERY,
-                            self.job_lock_keyspace,
-                            _lock_key,
                         )
 
                 yield AckableMessage(data=message_data, ack=ack)
