@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from typing import Optional
 
 import asyncpg
 import pytest
@@ -8,9 +9,6 @@ from taskiq import AckableMessage, BrokerMessage
 from taskiq.utils import maybe_awaitable
 
 from taskiq_pg import AsyncpgBroker
-from taskiq_pg.broker_queries import (
-    INSERT_MESSAGE_QUERY,
-)
 
 
 async def get_first_task(asyncpg_broker: AsyncpgBroker) -> AckableMessage:
@@ -62,6 +60,63 @@ async def test_kick_success(asyncpg_broker: AsyncpgBroker) -> None:
 
 
 @pytest.mark.anyio
+async def test_startup_with_many_existing_messages(
+    asyncpg_broker: AsyncpgBroker,
+) -> None:
+    """Broker starts and drains a backlog larger than the priming NOTIFY batch.
+
+    Inserts a few thousand queued messages *before* (re)starting the broker so
+    that startup runs ``NOTIFY_EXISTING_MESSAGES_QUERY``. This verifies that:
+
+    * the priming NOTIFY payload stays under the pg_notify 8000-byte limit
+      (it would raise during startup otherwise), and
+    * every message is eventually processed even though the priming batch is
+      capped well below the total backlog (``listen()`` also polls the DB).
+    """
+    total = 2500
+
+    # Bulk-insert queued messages directly into the table. status defaults to
+    # 'queued' and scheduled_at to NOW(), so they are immediately processable.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    await conn.execute(
+        f"""
+        INSERT INTO {asyncpg_broker.table_name} (task_id, task_name, message, labels)
+        SELECT 'bulk_' || g, 'bulk_task', 'msg_' || g, '{{}}'::jsonb
+        FROM generate_series(1, $1) AS g
+        """,  # noqa: S608
+        total,
+    )
+    await conn.close()
+
+    # Restart the broker so startup primes the queue from the existing backlog.
+    await asyncpg_broker.shutdown()
+    await asyncpg_broker.startup()
+
+    # Drain the full backlog, acknowledging each message.
+    received = 0
+
+    async def drain() -> None:
+        nonlocal received
+        async for message in asyncpg_broker.listen():
+            await maybe_awaitable(message.ack())
+            received += 1
+            if received >= total:
+                break
+
+    await asyncio.wait_for(drain(), timeout=120.0)
+
+    assert received == total
+
+    # No queued messages should remain.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    remaining = await conn.fetchval(
+        f"SELECT COUNT(*) FROM {asyncpg_broker.table_name} WHERE status = 'queued'",  # noqa: S608
+    )
+    await conn.close()
+    assert remaining == 0
+
+
+@pytest.mark.anyio
 async def test_startup(asyncpg_broker: AsyncpgBroker) -> None:
     """
     Test the startup process of the broker.
@@ -107,13 +162,23 @@ async def test_listen(asyncpg_broker: AsyncpgBroker) -> None:
     task_id = uuid.uuid4().hex
     task_name = "test_task"
     labels = {"label1": "label_val"}
-    message_id = await conn.fetchval(
-        INSERT_MESSAGE_QUERY.format(asyncpg_broker.table_name),
+    # For test, insert directly with NOW() for scheduled_at
+    result = await conn.fetchrow(
+        f"""
+        INSERT INTO {asyncpg_broker.table_name}
+        (task_id, task_name, message, labels, group_key, expire_at, scheduled_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING id, lock_key
+        """,
         task_id,
         task_name,
         message_content.decode(),
         json.dumps(labels),
+        None,  # group_key
+        None,  # expire_at
     )
+    assert result is not None
+    message_id = result["id"]
     # Send a NOTIFY with the message ID
     await conn.execute(f"NOTIFY {asyncpg_broker.channel_name}, '{message_id}'")
     await conn.close()
@@ -131,13 +196,23 @@ async def test_wrong_format(asyncpg_broker: AsyncpgBroker) -> None:
     """Test that messages with incorrect formats are still received."""
     # Insert a message with missing task_id and task_name
     conn = await asyncpg.connect(dsn=asyncpg_broker.dsn)
-    message_id = await conn.fetchval(
-        INSERT_MESSAGE_QUERY.format(asyncpg_broker.table_name),
+    # For test, insert directly with NOW() for scheduled_at
+    result = await conn.fetchrow(
+        f"""
+        INSERT INTO {asyncpg_broker.table_name}
+        (task_id, task_name, message, labels, group_key, expire_at, scheduled_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        RETURNING id, lock_key
+        """,
         "",  # Missing task_id
         "",  # Missing task_name
         "wrong",  # Message content
         json.dumps({}),  # Empty labels
+        None,  # group_key
+        None,  # expire_at
     )
+    assert result is not None
+    message_id = result["id"]
     # Send a NOTIFY with the message ID
     await conn.execute(f"NOTIFY {asyncpg_broker.channel_name}, '{message_id}'")
     await conn.close()
@@ -166,13 +241,164 @@ async def test_delayed_message(asyncpg_broker: AsyncpgBroker) -> None:
     )
     await asyncpg_broker.kick(sent)
 
-    # Try to get the message immediately (should not be available yet)
-    with pytest.raises(asyncio.TimeoutError):
-        await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
+    # The message will be inserted immediately and NOTIFY is sent immediately,
+    # but dequeue will not return it until scheduled_at is reached.
+    start_time = asyncio.get_event_loop().time()
 
-    # Wait for the delay to pass and receive the message
+    # Wait for the notification (should take ~2 seconds)
     message = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=3.0)
+    elapsed = asyncio.get_event_loop().time() - start_time
+
+    # Check that it took at least 1.5 seconds (allowing some margin)
+    assert elapsed >= 1.5, f"Message arrived too quickly: {elapsed}s"
     assert message.data == sent.message
 
     # Acknowledge the message
     await maybe_awaitable(message.ack())
+
+
+@pytest.mark.anyio
+async def test_group_key_coordination(asyncpg_broker: AsyncpgBroker) -> None:
+    """Test that messages with the same group_key are not processed concurrently."""
+    # Send two messages with the same group_key
+    group_key = "test_group_123"
+
+    sent1 = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task_1",
+        message=b"message_1",
+        labels={"group_key": group_key},
+    )
+
+    sent2 = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task_2",
+        message=b"message_2",
+        labels={"group_key": group_key},
+    )
+
+    await asyncpg_broker.kick(sent1)
+    await asyncpg_broker.kick(sent2)
+
+    # Create two listeners to simulate concurrent workers
+    async def get_message_with_timeout(timeout: float) -> Optional[AckableMessage]:
+        try:
+            return await asyncio.wait_for(
+                get_first_task(asyncpg_broker), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            return None
+
+    # Start two concurrent tasks to get messages
+    task1 = asyncio.create_task(get_message_with_timeout(1.0))
+    await asyncio.sleep(0.1)  # Small delay to ensure first task starts
+    task2 = asyncio.create_task(get_message_with_timeout(0.5))
+
+    # Wait for both tasks
+    msg1, msg2 = await asyncio.gather(task1, task2)
+
+    # One should get a message, the other should timeout
+    assert msg1 is not None
+    assert msg2 is None
+
+    # Acknowledge the first message
+    await maybe_awaitable(msg1.ack())
+
+    # Now the second message should be available
+    message2 = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
+    await maybe_awaitable(message2.ack())
+
+
+@pytest.mark.anyio
+async def test_message_ttl(asyncpg_broker: AsyncpgBroker) -> None:
+    """Test that messages respect TTL settings."""
+    # Send a message with a short TTL
+    sent = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task",
+        message=b"ttl_message",
+        labels={"ttl": 2},  # 2 seconds TTL
+    )
+
+    await asyncpg_broker.kick(sent)
+
+    # Retention TTL is not applied at enqueue time.
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    queued_row = await conn.fetchrow(
+        f"SELECT status, expire_at FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+    assert queued_row is not None
+    assert queued_row["status"] == "queued"
+    assert queued_row["expire_at"] is None
+
+    # Receive and acknowledge the message
+    message = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
+    await maybe_awaitable(message.ack())
+
+    # Check that the message is marked as completed with expire_at set
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    row = await conn.fetchrow(
+        f"SELECT status, expire_at FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+
+    assert row is not None
+    assert row["status"] == "completed"
+    assert row["expire_at"] is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("ttl", [0, -1])
+async def test_non_positive_ttl_inserts_null_expire_at(
+    asyncpg_broker: AsyncpgBroker,
+    ttl: int,
+) -> None:
+    """Non-positive TTL must bind SQL NULL, not the string 'NULL'."""
+    sent = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task",
+        message=b"ttl_message",
+        labels={"ttl": ttl},
+    )
+
+    await asyncpg_broker.kick(sent)
+
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    row = await conn.fetchrow(
+        f"SELECT expire_at FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+
+    assert row is not None
+    assert row["expire_at"] is None
+
+
+@pytest.mark.anyio
+async def test_non_positive_ttl_uses_default_retention_on_ack(
+    asyncpg_broker: AsyncpgBroker,
+) -> None:
+    """Non-positive per-message TTL falls back to broker retention default on ack."""
+    sent = BrokerMessage(
+        task_id=uuid.uuid4().hex,
+        task_name="test_task",
+        message=b"ttl_message",
+        labels={"ttl": 0},
+    )
+
+    await asyncpg_broker.kick(sent)
+    message = await asyncio.wait_for(get_first_task(asyncpg_broker), timeout=1.0)
+    await maybe_awaitable(message.ack())
+
+    conn = await asyncpg.connect(asyncpg_broker.dsn)
+    ttl_seconds = await conn.fetchval(
+        f"SELECT EXTRACT(EPOCH FROM (expire_at - NOW())) FROM {asyncpg_broker.table_name} WHERE task_id = $1",  # noqa: S608
+        sent.task_id,
+    )
+    await conn.close()
+
+    assert ttl_seconds is not None
+    assert 0 < ttl_seconds <= asyncpg_broker.message_ttl
