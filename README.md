@@ -148,7 +148,7 @@ select convert_from(result, 'UTF8') from taskiq_results;
 ## Enhanced Features
 
 ### Advisory Locking
-The broker now uses PostgreSQL advisory locks to prevent duplicate message processing. Each message gets a unique lock that is held while the message is being processed and released when acknowledged.
+The broker attempts to use PostgreSQL advisory locks to reduce duplicate message processing; see `ERRATA.md` for known limitations and current semantics.
 
 ### Message States
 Messages now have three states:

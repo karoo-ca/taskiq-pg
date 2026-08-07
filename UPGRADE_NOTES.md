@@ -31,8 +31,8 @@ The `AsyncpgBroker` constructor now accepts additional parameters:
 ## New Features
 
 ### 1. Advisory Locking
-- Prevents duplicate message processing using PostgreSQL advisory locks
-- Each message gets a unique lock that's held during processing
+- Attempts to reduce duplicate message processing using PostgreSQL advisory locks (see `ERRATA.md` for current limitations)
+- Each message gets a unique lock key used for coordination
 - Locks are automatically released on acknowledgment
 
 ### 2. Message States

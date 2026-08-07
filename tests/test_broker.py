@@ -241,8 +241,8 @@ async def test_delayed_message(asyncpg_broker: AsyncpgBroker) -> None:
     )
     await asyncpg_broker.kick(sent)
 
-    # The message will be inserted immediately but notification will be delayed
-    # So we should be able to see it's queued but not get notified
+    # The message will be inserted immediately and NOTIFY is sent immediately,
+    # but dequeue will not return it until scheduled_at is reached.
     start_time = asyncio.get_event_loop().time()
 
     # Wait for the notification (should take ~2 seconds)
